@@ -183,11 +183,34 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			}
 			return respond(result, nil)
 
+		case protocol.MethodTextDocumentCodeAction:
+			var params protocol.CodeActionParams
+			if err := decodeParams(req, &params); err != nil {
+				return respond(nil, err)
+			}
+			return respond(s.dependencyOutputCodeActions(params), nil)
+
+		case protocol.MethodWorkspaceExecuteCommand:
+			var params protocol.ExecuteCommandParams
+			if err := decodeParams(req, &params); err != nil {
+				return respond(nil, err)
+			}
+			if params.Command != ResolveDependencyOutputsCommand {
+				return respond(nil, fmt.Errorf("unsupported command %q: %w", params.Command, jsonrpc2.ErrMethodNotFound))
+			}
+			args, err := decodeDependencyOutputArgs(params.Arguments)
+			if err != nil {
+				return respond(nil, fmt.Errorf("invalid command arguments: %w: %w", err, jsonrpc2.ErrInvalidParams))
+			}
+			result, err := s.executeDependencyOutputs(ctx, args)
+			return respond(result, err)
+
 		case protocol.MethodShutdown:
 			s.shutdown.Store(true)
 			return respond(nil, nil)
 
 		case protocol.MethodExit:
+			s.cleanupTempFiles()
 			select {
 			case <-s.exited:
 			default:

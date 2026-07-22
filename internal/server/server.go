@@ -5,25 +5,37 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/tg"
+	"terragrunt-ls/internal/tg/dependency"
+	"time"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
 )
 
 type Server struct {
-	log      logger.Logger
-	state    *tg.State
-	client   Client
-	conn     jsonrpc2.Conn
-	shutdown atomic.Bool
-	exited   chan struct{}
+	log              logger.Logger
+	state            *tg.State
+	client           Client
+	conn             jsonrpc2.Conn
+	shutdown         atomic.Bool
+	exited           chan struct{}
+	dependencyRunner dependency.Runner
+	tempMu           sync.Mutex
+	tempFiles        map[string]struct{}
 }
 
 func New(log logger.Logger, state *tg.State) *Server {
-	return &Server{log: log, state: state, exited: make(chan struct{})}
+	return &Server{
+		log:              log,
+		state:            state,
+		exited:           make(chan struct{}),
+		dependencyRunner: dependency.NewRunner(60 * time.Second),
+		tempFiles:        make(map[string]struct{}),
+	}
 }
 
 func (s *Server) Bind(conn jsonrpc2.Conn) {
@@ -45,6 +57,12 @@ func (s *Server) initialize() protocol.InitializeResult {
 			CompletionProvider:         &protocol.CompletionOptions{},
 			DocumentFormattingProvider: true,
 			RenameProvider:             &protocol.RenameOptions{PrepareProvider: true},
+			CodeActionProvider: &protocol.CodeActionOptions{
+				CodeActionKinds: []protocol.CodeActionKind{protocol.RefactorRewrite},
+			},
+			ExecuteCommandProvider: &protocol.ExecuteCommandOptions{
+				Commands: []string{ResolveDependencyOutputsCommand},
+			},
 		},
 		ServerInfo: &protocol.ServerInfo{Name: "terragrunt-ls", Version: "0.0.1"},
 	}
