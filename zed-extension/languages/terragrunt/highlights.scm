@@ -158,11 +158,10 @@
         (identifier) @type
         (#any-of? @type "bool" "string" "number" "object" "tuple" "list" "map" "set" "any"))))
 
-; Terragrunt specific
-; more visible values, dependency & feature
+; Terragrunt traversal roots and members
 (expression
   (variable_expr
     (identifier) @type
-    (#any-of? @type "values" "dependency" "feature"))
+    (#any-of? @type "local" "dependency" "include" "inputs"))
   (get_attr
     (identifier) @variable))
