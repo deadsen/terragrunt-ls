@@ -207,6 +207,9 @@ func GetNodeIncludeLabel(inode *IndexedNode) (string, bool) {
 	if attr == nil {
 		return "", false
 	}
+	if attr.Node.(*hclsyntax.Attribute).Name != "path" {
+		return "", false
+	}
 
 	local := FindFirstParentMatch(attr, IsIncludeBlock)
 	if local == nil {

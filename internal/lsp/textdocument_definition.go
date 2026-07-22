@@ -9,5 +9,5 @@ type DefinitionRequest struct {
 
 type DefinitionResponse struct {
 	Response
-	Result protocol.Location `json:"result"`
+	Result []protocol.Location `json:"result"`
 }

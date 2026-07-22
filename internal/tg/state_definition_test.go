@@ -38,10 +38,11 @@ inputs = {
 	// Cursor on `foo` in `local.foo`.
 	resp := s.Definition(l, 1, docURI, protocol.Position{Line: 5, Character: 14})
 
-	assert.Equal(t, docURI, resp.Result.URI)
-	assert.Equal(t, uint32(1), resp.Result.Range.Start.Line)
-	assert.Equal(t, uint32(2), resp.Result.Range.Start.Character)
-	assert.Equal(t, uint32(5), resp.Result.Range.End.Character)
+	require.Len(t, resp.Result, 1)
+	assert.Equal(t, docURI, resp.Result[0].URI)
+	assert.Equal(t, uint32(1), resp.Result[0].Range.Start.Line)
+	assert.Equal(t, uint32(2), resp.Result[0].Range.Start.Character)
+	assert.Equal(t, uint32(5), resp.Result[0].Range.End.Character)
 }
 
 func TestState_Definition_LocalReference_NotFound(t *testing.T) {
@@ -65,7 +66,5 @@ func TestState_Definition_LocalReference_NotFound(t *testing.T) {
 	// Cursor on `nonexistent` — no `locals` block defines it.
 	resp := s.Definition(l, 1, docURI, protocol.Position{Line: 1, Character: 18})
 
-	// Empty response points back at the cursor position.
-	assert.Equal(t, docURI, resp.Result.URI)
-	assert.Equal(t, protocol.Position{Line: 1, Character: 18}, resp.Result.Range.Start)
+	assert.Empty(t, resp.Result)
 }

@@ -5,11 +5,14 @@ package definition
 import (
 	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
+	terragruntpath "terragrunt-ls/internal/tg/path"
 	"terragrunt-ls/internal/tg/store"
+	"terragrunt-ls/internal/tg/symbol"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"go.lsp.dev/protocol"
+	"go.lsp.dev/uri"
 )
 
 const (
@@ -64,6 +67,68 @@ func GetDefinitionTargetWithContext(l logger.Logger, store store.Store, position
 	l.Debug("No definition found at", "line", position.Line, "character", position.Character)
 
 	return "", DefinitionContextNull
+}
+
+// Resolve returns all definition locations for the target at position.
+func Resolve(st store.Store, docURI protocol.DocumentURI, position protocol.Position) []protocol.Location {
+	if st.AST == nil {
+		return nil
+	}
+
+	if target, ok := symbol.At(st.AST, st.Document, position); ok {
+		switch target.Kind {
+		case symbol.Local:
+			for _, occurrence := range symbol.Occurrences(st.AST, st.Document, target, true) {
+				if occurrence.Declaration {
+					return []protocol.Location{{URI: docURI, Range: occurrence.Range}}
+				}
+			}
+			return nil
+		case symbol.Dependency:
+			configPath, err := terragruntpath.DependencyConfig(st, target.Name)
+			if err != nil {
+				return nil
+			}
+			targetFile, err := terragruntpath.DependencyTarget(docURI.Filename(), configPath)
+			if err != nil {
+				return nil
+			}
+			return fileLocation(targetFile)
+		case symbol.Include:
+			targetFile, err := terragruntpath.Include(st, target.Name)
+			if err != nil {
+				return nil
+			}
+			return fileLocation(targetFile)
+		}
+	}
+
+	node := st.AST.FindNodeAt(ast.ToHCLPos(st.Document, position))
+	if node == nil {
+		return nil
+	}
+	if dependency, ok := ast.GetNodeDependencyLabel(node); ok {
+		configPath, err := terragruntpath.DependencyConfig(st, dependency)
+		if err == nil {
+			if targetFile, targetErr := terragruntpath.DependencyTarget(docURI.Filename(), configPath); targetErr == nil {
+				return fileLocation(targetFile)
+			}
+		}
+	}
+	if include, ok := ast.GetNodeIncludeLabel(node); ok {
+		if targetFile, err := terragruntpath.Include(st, include); err == nil {
+			return fileLocation(targetFile)
+		}
+	}
+	if targetFile, err := terragruntpath.FileCall(st, node); err == nil {
+		return fileLocation(targetFile)
+	}
+
+	return nil
+}
+
+func fileLocation(filename string) []protocol.Location {
+	return []protocol.Location{{URI: uri.File(filename), Range: protocol.Range{}}}
 }
 
 // traversalDefinitionTarget extracts a (name, context) pair from a

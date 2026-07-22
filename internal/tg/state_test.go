@@ -481,38 +481,27 @@ func TestState_Definition(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-
 	_, err := testutils.CreateFile(tmpDir, "root.hcl", "")
 	require.NoError(t, err)
-
 	rootURI := uri.File(filepath.Join(tmpDir, "root.hcl"))
 
-	// Create a vpc directory
 	vpcDir := filepath.Join(tmpDir, "vpc")
-	err = os.MkdirAll(vpcDir, 0755)
+	err = os.MkdirAll(vpcDir, 0o755)
 	require.NoError(t, err)
-
-	// Create a terragrunt.hcl file in the vpc directory
 	_, err = testutils.CreateFile(vpcDir, "terragrunt.hcl", "")
 	require.NoError(t, err)
-
 	vpcURI := uri.File(filepath.Join(vpcDir, "terragrunt.hcl"))
 
 	unitDir := filepath.Join(tmpDir, "foo")
-
-	err = os.MkdirAll(unitDir, 0755)
+	err = os.MkdirAll(unitDir, 0o755)
 	require.NoError(t, err)
+	unitURI := uri.File(filepath.Join(unitDir, "terragrunt.hcl"))
 
-	// Create the URI for the unit file
-	unitPath := filepath.Join(unitDir, "terragrunt.hcl")
-
-	unitURI := uri.File(unitPath)
-
-	tc := []struct {
+	tests := []struct {
 		name     string
 		document string
-		expected lsp.DefinitionResponse
 		position protocol.Position
+		expected []protocol.Location
 	}{
 		{
 			name: "nothing to jump to",
@@ -520,105 +509,40 @@ func TestState_Definition(t *testing.T) {
 	foo = "bar"
 	bar = local.foo
 }`,
-			position: protocol.Position{
-				Line:      0,
-				Character: 0,
-			},
-			expected: lsp.DefinitionResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: protocol.Location{
-					URI: unitURI,
-					Range: protocol.Range{
-						Start: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-						End: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-					},
-				},
-			},
+			position: protocol.Position{Line: 0, Character: 0},
+			expected: []protocol.Location{},
 		},
 		{
 			name: "go to root include",
 			document: `include "root" {
 	path = find_in_parent_folders("root.hcl")
 }`,
-			position: protocol.Position{
-				Line:      1,
-				Character: 8,
-			},
-			expected: lsp.DefinitionResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: protocol.Location{
-					URI: rootURI,
-					Range: protocol.Range{
-						Start: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-						End: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-					},
-				},
-			},
+			position: protocol.Position{Line: 1, Character: 8},
+			expected: []protocol.Location{{URI: rootURI, Range: protocol.Range{}}},
 		},
 		{
 			name: "go to dependency",
 			document: `dependency "vpc" {
     config_path = "../vpc"
 }`,
-			position: protocol.Position{
-				Line:      1,
-				Character: 18,
-			},
-			expected: lsp.DefinitionResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: protocol.Location{
-					URI: vpcURI,
-					Range: protocol.Range{
-						Start: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-						End: protocol.Position{
-							Line:      0,
-							Character: 0,
-						},
-					},
-				},
-			},
+			position: protocol.Position{Line: 1, Character: 18},
+			expected: []protocol.Location{{URI: vpcURI, Range: protocol.Range{}}},
 		},
 	}
 
-	for _, tt := range tc {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			state := tg.NewState()
-
 			l := testutils.NewTestLogger(t)
-
 			diags := state.OpenDocument(t.Context(), l, unitURI, tt.document, 1)
 			assert.Empty(t, diags)
-
 			require.Len(t, state.Configs, 1)
 
-			definition := state.Definition(l, 1, unitURI, tt.position)
-			assert.Equal(t, tt.expected, definition)
+			response := state.Definition(l, 1, unitURI, tt.position)
+			assert.Equal(t, lsp.Response{RPC: "2.0", ID: testutils.PointerOfInt(1)}, response.Response)
+			assert.Equal(t, tt.expected, response.Result)
 		})
 	}
 }
@@ -844,8 +768,7 @@ func TestState_Definition_StackFile(t *testing.T) {
 
 	pos := protocol.Position{Line: 0, Character: 0}
 	def := state.Definition(l, 1, stackURI, pos)
-	assert.Equal(t, stackURI, def.Result.URI)
-	assert.Equal(t, pos, def.Result.Range.Start)
+	assert.Empty(t, def.Result)
 }
 
 func TestState_TextDocumentFormatting(t *testing.T) {
