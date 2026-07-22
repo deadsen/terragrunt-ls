@@ -16,7 +16,6 @@ import (
 	"go.lsp.dev/uri"
 
 	"terragrunt-ls/internal/logger"
-	"terragrunt-ls/internal/lsp"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 	"terragrunt-ls/internal/tg/store"
@@ -392,11 +391,11 @@ func TestState_UpdateDocument(t *testing.T) {
 func TestState_Hover(t *testing.T) {
 	t.Parallel()
 
-	tc := []struct {
-		expected lsp.HoverResponse
+	tests := []struct {
 		name     string
 		document string
 		position protocol.Position
+		expected string
 	}{
 		{
 			name: "simple locals",
@@ -404,22 +403,8 @@ func TestState_Hover(t *testing.T) {
 	foo = "bar"
 	bar = local.foo
 }`,
-			position: protocol.Position{
-				Line:      2,
-				Character: 15,
-			},
-			expected: lsp.HoverResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: lsp.HoverResult{
-					Contents: protocol.MarkupContent{
-						Kind:  protocol.Markdown,
-						Value: "```hcl\nfoo = \"bar\"\n```",
-					},
-				},
-			},
+			position: protocol.Position{Line: 2, Character: 15},
+			expected: "```hcl\nfoo = \"bar\"\n```",
 		},
 		{
 			name: "interpolated locals",
@@ -428,40 +413,21 @@ func TestState_Hover(t *testing.T) {
 	baz = "${local.foo}-baz"
 	qux = local.baz
 }`,
-			position: protocol.Position{
-				Line:      3,
-				Character: 15,
-			},
-			expected: lsp.HoverResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: lsp.HoverResult{
-					Contents: protocol.MarkupContent{
-						Kind:  protocol.Markdown,
-						Value: "```hcl\nbaz = \"bar-baz\"\n```",
-					},
-				},
-			},
+			position: protocol.Position{Line: 3, Character: 15},
+			expected: "```hcl\nbaz = \"bar-baz\"\n```",
 		},
 	}
 
-	for _, tt := range tc {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
 			state := tg.NewState()
-
 			l := testutils.NewTestLogger(t)
-
 			diags := state.OpenDocument(t.Context(), l, "file:///foo/terragrunt.hcl", tt.document, 1)
 			assert.Empty(t, diags)
-
-			require.Len(t, state.Configs, 1)
-
-			hover := state.Hover(l, 1, "file:///foo/terragrunt.hcl", tt.position)
-			assert.Equal(t, tt.expected, hover)
+			hover := state.Hover(l, "file:///foo/terragrunt.hcl", tt.position)
+			require.NotNil(t, hover)
+			assert.Equal(t, tt.expected, hover.Contents.Value)
 		})
 	}
 }
@@ -478,9 +444,10 @@ inputs = { port = local.service.database.port }`
 	docURI := protocol.DocumentURI("file:///tmp/terragrunt.hcl")
 	require.Empty(t, state.OpenDocument(t.Context(), l, docURI, source, 1))
 
-	result := state.Hover(l, 1, docURI, protocol.Position{Line: 3, Character: 43})
+	result := state.Hover(l, docURI, protocol.Position{Line: 3, Character: 43})
 
-	assert.Contains(t, result.Result.Contents.Value, "port = 5432")
+	require.NotNil(t, result)
+	assert.Contains(t, result.Contents.Value, "port = 5432")
 }
 
 func TestState_Hover_MarkedValueIsHidden(t *testing.T) {
@@ -499,9 +466,9 @@ inputs = { value = local.secret }`
 	stored.CfgAsCty = stored.CfgAsCty.Mark("sensitive")
 	state.Configs[docURI.Filename()] = stored
 
-	result := state.Hover(l, 1, docURI, protocol.Position{Line: 3, Character: 31})
+	result := state.Hover(l, docURI, protocol.Position{Line: 3, Character: 31})
 
-	assert.Empty(t, result.Result.Contents.Value)
+	assert.Nil(t, result)
 }
 
 func TestState_Definition(t *testing.T) {
@@ -567,9 +534,8 @@ func TestState_Definition(t *testing.T) {
 			assert.Empty(t, diags)
 			require.Len(t, state.Configs, 1)
 
-			response := state.Definition(l, 1, unitURI, tt.position)
-			assert.Equal(t, lsp.Response{RPC: "2.0", ID: testutils.PointerOfInt(1)}, response.Response)
-			assert.Equal(t, tt.expected, response.Result)
+			response := state.Definition(unitURI, tt.position)
+			assert.Equal(t, tt.expected, response)
 		})
 	}
 }
@@ -577,86 +543,22 @@ func TestState_Definition(t *testing.T) {
 func TestState_TextDocumentCompletion(t *testing.T) {
 	t.Parallel()
 
-	tc := []struct {
-		name              string
-		initial           string
-		document          string
-		expected          lsp.CompletionResponse
-		position          protocol.Position
-		expectDiagnostics bool
-	}{
-		{
-			name:     "complete dep",
-			document: "dep",
-			position: protocol.Position{
-				Line:      0,
-				Character: 3,
-			},
-			expectDiagnostics: true,
-			expected: lsp.CompletionResponse{
-				Response: lsp.Response{
-					RPC: "2.0",
-					ID:  testutils.PointerOfInt(1),
-				},
-				Result: []protocol.CompletionItem{
-					{
-						Label: "dependency",
-						Documentation: protocol.MarkupContent{
-							Kind:  protocol.Markdown,
-							Value: "# dependency\nThe dependency block is used to configure unit dependencies.\nEach dependency block exposes outputs of the dependency unit as variables you can reference in dependent unit configuration.",
-						},
-						Kind:             protocol.CompletionItemKindClass,
-						InsertTextFormat: protocol.InsertTextFormatSnippet,
-						TextEdit: &protocol.TextEdit{
-							Range: protocol.Range{
-								Start: protocol.Position{Line: 0, Character: 0},
-								End:   protocol.Position{Line: 0, Character: 3},
-							},
-							NewText: `dependency "${1}" {
-	config_path = "${2}"
-}`,
-						},
-					},
-					{
-						Label: "dependencies",
-						Documentation: protocol.MarkupContent{
-							Kind:  protocol.Markdown,
-							Value: "# dependencies\nThe dependencies block is used to enumerate all the Terragrunt units that need to be applied before this unit.",
-						},
-						Kind:             protocol.CompletionItemKindClass,
-						InsertTextFormat: protocol.InsertTextFormatSnippet,
-						TextEdit: &protocol.TextEdit{
-							Range: protocol.Range{
-								Start: protocol.Position{Line: 0, Character: 0},
-								End:   protocol.Position{Line: 0, Character: 3},
-							},
-							NewText: `dependencies {
-	paths = ["${1}"]
-}`,
-						},
-					},
-				},
-			},
-		},
-	}
+	state := tg.NewState()
+	l := testutils.NewTestLogger(t)
+	document := "dep"
+	diags := state.OpenDocument(t.Context(), l, "file:///terragrunt.hcl", document, 1)
+	require.NotEmpty(t, diags)
 
-	for _, tt := range tc {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			state := tg.NewState()
-			l := testutils.NewTestLogger(t)
-
-			diags := state.OpenDocument(t.Context(), l, "file:///terragrunt.hcl", tt.document, 1)
-			if tt.expectDiagnostics {
-				require.NotEmpty(t, diags)
-			} else {
-				require.Empty(t, diags)
-			}
-
-			completion := state.TextDocumentCompletion(l, 1, "file:///terragrunt.hcl", tt.position)
-			assert.Equal(t, tt.expected, completion)
-		})
+	items := state.TextDocumentCompletion(l, "file:///terragrunt.hcl", protocol.Position{Line: 0, Character: 3})
+	require.Len(t, items, 2)
+	assert.Equal(t, "dependency", items[0].Label)
+	assert.Equal(t, "dependencies", items[1].Label)
+	for _, item := range items {
+		require.NotNil(t, item.TextEdit)
+		assert.Equal(t, protocol.Range{
+			Start: protocol.Position{Line: 0, Character: 0},
+			End:   protocol.Position{Line: 0, Character: 3},
+		}, item.TextEdit.Range)
 	}
 }
 
@@ -674,10 +576,10 @@ func TestState_TextDocumentCompletion_StackFile(t *testing.T) {
 	diags := state.OpenDocument(t.Context(), l, stackURI, "uni", 1)
 	require.NotEmpty(t, diags)
 
-	completion := state.TextDocumentCompletion(l, 1, stackURI, protocol.Position{Line: 0, Character: 3})
+	completion := state.TextDocumentCompletion(l, stackURI, protocol.Position{Line: 0, Character: 3})
 
-	require.Len(t, completion.Result, 1)
-	assert.Equal(t, "unit", completion.Result[0].Label)
+	require.Len(t, completion, 1)
+	assert.Equal(t, "unit", completion[0].Label)
 }
 
 func TestState_TextDocumentCompletion_ValuesFile(t *testing.T) {
@@ -693,9 +595,9 @@ func TestState_TextDocumentCompletion_ValuesFile(t *testing.T) {
 	diags := state.OpenDocument(t.Context(), l, valuesURI, "loc", 1)
 	assert.Empty(t, diags)
 
-	completion := state.TextDocumentCompletion(l, 1, valuesURI, protocol.Position{Line: 0, Character: 3})
+	completion := state.TextDocumentCompletion(l, valuesURI, protocol.Position{Line: 0, Character: 3})
 
-	assert.Empty(t, completion.Result)
+	assert.Empty(t, completion)
 }
 
 func TestState_OpenDocument_StackFile(t *testing.T) {
@@ -758,8 +660,8 @@ func TestState_Hover_StackFile(t *testing.T) {
 	path   = "vpc"
 }`, 1)
 
-	hover := state.Hover(l, 1, stackURI, protocol.Position{Line: 0, Character: 0})
-	assert.Empty(t, hover.Result.Contents.Value)
+	hover := state.Hover(l, stackURI, protocol.Position{Line: 0, Character: 0})
+	assert.Nil(t, hover)
 }
 
 func TestState_Hover_ValuesFile(t *testing.T) {
@@ -774,8 +676,8 @@ func TestState_Hover_ValuesFile(t *testing.T) {
 
 	_ = state.OpenDocument(t.Context(), l, valuesURI, `some_var = "hello"`, 1)
 
-	hover := state.Hover(l, 1, valuesURI, protocol.Position{Line: 0, Character: 0})
-	assert.Empty(t, hover.Result.Contents.Value)
+	hover := state.Hover(l, valuesURI, protocol.Position{Line: 0, Character: 0})
+	assert.Nil(t, hover)
 }
 
 func TestState_Definition_StackFile(t *testing.T) {
@@ -794,8 +696,8 @@ func TestState_Definition_StackFile(t *testing.T) {
 }`, 1)
 
 	pos := protocol.Position{Line: 0, Character: 0}
-	def := state.Definition(l, 1, stackURI, pos)
-	assert.Empty(t, def.Result)
+	def := state.Definition(stackURI, pos)
+	assert.Empty(t, def)
 }
 
 func TestState_TextDocumentFormatting(t *testing.T) {
@@ -847,18 +749,18 @@ bar=   "baz"
 			require.Empty(t, diags)
 
 			// Request formatting
-			response := state.TextDocumentFormatting(l, 1, "file:///terragrunt.hcl")
+			response := state.TextDocumentFormatting(l, "file:///terragrunt.hcl")
 
 			// Verify the formatting result
-			require.Len(t, response.Result, 1)
-			assert.Equal(t, tt.expected, response.Result[0].NewText)
+			require.Len(t, response, 1)
+			assert.Equal(t, tt.expected, response[0].NewText)
 
-			assert.Equal(t, uint32(0), response.Result[0].Range.Start.Line)
-			assert.Equal(t, uint32(0), response.Result[0].Range.Start.Character)
+			assert.Equal(t, uint32(0), response[0].Range.Start.Line)
+			assert.Equal(t, uint32(0), response[0].Range.Start.Character)
 
 			lines := strings.Split(tt.document, "\n")
-			assert.Equal(t, uint32(len(lines)-1), response.Result[0].Range.End.Line)
-			assert.Equal(t, uint32(len(lines[len(lines)-1])), response.Result[0].Range.End.Character)
+			assert.Equal(t, uint32(len(lines)-1), response[0].Range.End.Line)
+			assert.Equal(t, uint32(len(lines[len(lines)-1])), response[0].Range.End.Character)
 		})
 	}
 }

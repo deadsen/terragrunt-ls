@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"terragrunt-ls/internal/lsp"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -99,9 +98,9 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.Hover(s.log, 0, params.TextDocument.URI, params.Position).Result
+			result := s.state.Hover(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
-				return respond(lsp.HoverResult{}, nil)
+				return respond((*protocol.Hover)(nil), nil)
 			}
 			return respond(result, nil)
 
@@ -111,15 +110,9 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.Definition(s.log, 0, params.TextDocument.URI, params.Position).Result
+			result := s.state.Definition(params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
-				return respond(protocol.Location{
-					URI: params.TextDocument.URI,
-					Range: protocol.Range{
-						Start: params.Position,
-						End:   params.Position,
-					},
-				}, nil)
+				return respond([]protocol.Location{}, nil)
 			}
 			return respond(result, nil)
 
@@ -129,7 +122,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.TextDocumentCompletion(s.log, 0, params.TextDocument.URI, params.Position).Result
+			result := s.state.TextDocumentCompletion(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond([]protocol.CompletionItem{}, nil)
 			}
@@ -141,7 +134,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.TextDocumentFormatting(s.log, 0, params.TextDocument.URI).Result
+			result := s.state.TextDocumentFormatting(s.log, params.TextDocument.URI)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond([]protocol.TextEdit{}, nil)
 			}
@@ -153,7 +146,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.TextDocumentReferences(s.log, 0, params.TextDocument.URI, params.Position, params.Context.IncludeDeclaration).Result
+			result := s.state.TextDocumentReferences(s.log, params.TextDocument.URI, params.Position, params.Context.IncludeDeclaration)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
@@ -165,11 +158,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.PrepareRename(s.log, 0, params.TextDocument.URI, params.Position).Result
+			renameRange, placeholder, found := s.state.PrepareRename(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
-			return respond(result, nil)
+			if !found {
+				return respond(nil, nil)
+			}
+			return respond(&prepareRenameResult{Range: renameRange, Placeholder: placeholder}, nil)
 
 		case protocol.MethodTextDocumentRename:
 			var params protocol.RenameParams
@@ -177,7 +173,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, err)
 			}
 			st, ok := s.state.Document(params.TextDocument.URI)
-			result := s.state.TextDocumentRename(s.log, 0, params.TextDocument.URI, params.Position, params.NewName).Result
+			result := s.state.TextDocumentRename(s.log, params.TextDocument.URI, params.Position, params.NewName)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
@@ -222,6 +218,11 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			return jsonrpc2.MethodNotFoundHandler(ctx, reply, req)
 		}
 	}
+}
+
+type prepareRenameResult struct {
+	Range       protocol.Range `json:"range"`
+	Placeholder string         `json:"placeholder"`
 }
 
 func decodeParams(req jsonrpc2.Request, params any) error {

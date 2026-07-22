@@ -7,7 +7,6 @@ import (
 	"sync"
 	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
-	"terragrunt-ls/internal/lsp"
 	"terragrunt-ls/internal/tg/completion"
 	"terragrunt-ls/internal/tg/definition"
 	"terragrunt-ls/internal/tg/diagnostics"
@@ -217,73 +216,41 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 	return diags, true
 }
 
-func (s *State) Hover(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.HoverResponse {
+func (s *State) Hover(l logger.Logger, docURI protocol.DocumentURI, position protocol.Position) *protocol.Hover {
 	st, ok := s.Document(docURI)
-	if !ok {
-		return newEmptyHoverResponse(id)
+	if !ok || st.FileType != store.FileTypeUnit {
+		return nil
 	}
 
-	l.Debug(
-		"Hovering over character",
-		"uri", docURI,
-		"position", position,
-	)
-
-	if st.FileType != store.FileTypeUnit {
-		return newEmptyHoverResponse(id)
-	}
-
-	l.Debug(
-		"Config",
-		"uri", docURI,
-		"config", st.Cfg,
-	)
-
+	l.Debug("Hovering over character", "uri", docURI, "position", position)
 	path, _, found := hover.GetLocalPath(st, position)
-
-	l.Debug(
-		"Hovering with context",
-		"path", path,
-	)
-
-	if !found || len(path) == 0 {
-		return newEmptyHoverResponse(id)
-	}
-
-	if st.Cfg == nil {
-		return newEmptyHoverResponse(id)
+	l.Debug("Hovering with context", "path", path)
+	if !found || len(path) == 0 || st.Cfg == nil {
+		return nil
 	}
 	if _, ok := st.Cfg.Locals[path[0]]; !ok {
-		return newEmptyHoverResponse(id)
+		return nil
 	}
 	if st.CfgAsCty == cty.NilVal || st.CfgAsCty.IsMarked() || !st.CfgAsCty.IsKnown() || st.CfgAsCty.IsNull() {
-		return newEmptyHoverResponse(id)
+		return nil
 	}
 
 	locals, ok := localValue(st.CfgAsCty, []string{"locals"})
 	if !ok {
-		return newEmptyHoverResponse(id)
+		return nil
 	}
 	localVal, ok := localValue(locals, path)
 	if !ok {
-		return newEmptyHoverResponse(id)
+		return nil
 	}
 
 	name := path[len(path)-1]
-	f := hclwrite.NewEmptyFile()
-	rootBody := f.Body()
-	rootBody.SetAttributeValue(name, localVal)
-
-	return lsp.HoverResponse{
-		Response: lsp.Response{
-			RPC: lsp.RPCVersion,
-			ID:  &id,
-		},
-		Result: lsp.HoverResult{
-			Contents: protocol.MarkupContent{
-				Kind:  protocol.Markdown,
-				Value: text.WrapAsHCLCodeFence(strings.TrimSpace(string(f.Bytes()))),
-			},
+	file := hclwrite.NewEmptyFile()
+	file.Body().SetAttributeValue(name, localVal)
+	return &protocol.Hover{
+		Contents: protocol.MarkupContent{
+			Kind:  protocol.Markdown,
+			Value: text.WrapAsHCLCodeFence(strings.TrimSpace(string(file.Bytes()))),
 		},
 	}
 }
@@ -293,7 +260,6 @@ func localValue(value cty.Value, path []string) (cty.Value, bool) {
 		if value == cty.NilVal || value.IsMarked() || !value.IsKnown() || value.IsNull() {
 			return cty.NilVal, false
 		}
-
 		switch {
 		case value.Type().HasAttribute(name):
 			value = value.GetAttr(name)
@@ -303,204 +269,97 @@ func localValue(value cty.Value, path []string) (cty.Value, bool) {
 			return cty.NilVal, false
 		}
 	}
-
 	return value, value != cty.NilVal && !value.IsMarked() && value.IsKnown() && !value.IsNull()
 }
 
-func newEmptyHoverResponse(id int) lsp.HoverResponse {
-	return lsp.HoverResponse{
-		Response: lsp.Response{
-			RPC: lsp.RPCVersion,
-			ID:  &id,
-		},
-	}
-}
-
-func (s *State) Definition(_ logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.DefinitionResponse {
+func (s *State) Definition(docURI protocol.DocumentURI, position protocol.Position) []protocol.Location {
 	st, ok := s.Document(docURI)
 	if !ok {
-		return lsp.DefinitionResponse{
-			Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-			Result:   []protocol.Location{},
-		}
+		return []protocol.Location{}
 	}
-
 	locations := definition.Resolve(st, docURI, position)
 	if locations == nil {
-		locations = []protocol.Location{}
+		return []protocol.Location{}
 	}
-
-	return lsp.DefinitionResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result:   locations,
-	}
+	return locations
 }
 
-func (s *State) TextDocumentCompletion(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.CompletionResponse {
+func (s *State) TextDocumentCompletion(l logger.Logger, docURI protocol.DocumentURI, position protocol.Position) []protocol.CompletionItem {
 	st, ok := s.Document(docURI)
 	if !ok {
-		return lsp.CompletionResponse{
-			Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-			Result:   []protocol.CompletionItem{},
-		}
+		return []protocol.CompletionItem{}
 	}
-
-	items := completion.GetCompletions(l, st, position)
-
-	response := lsp.CompletionResponse{
-		Response: lsp.Response{
-			RPC: "2.0",
-			ID:  &id,
-		},
-		Result: items,
-	}
-
-	return response
+	return completion.GetCompletions(l, st, position)
 }
 
-func (s *State) TextDocumentFormatting(l logger.Logger, id int, docURI protocol.DocumentURI) lsp.FormatResponse {
+func (s *State) TextDocumentFormatting(l logger.Logger, docURI protocol.DocumentURI) []protocol.TextEdit {
 	st, ok := s.Document(docURI)
 	if !ok {
-		return lsp.FormatResponse{
-			Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-			Result:   []protocol.TextEdit{},
-		}
+		return []protocol.TextEdit{}
 	}
-
-	l.Debug(
-		"Formatting requested",
-		"uri", docURI,
-	)
-
-	formatted := hclwrite.Format([]byte(st.Document))
-
-	return lsp.FormatResponse{
-		Response: lsp.Response{
-			RPC: lsp.RPCVersion,
-			ID:  &id,
+	l.Debug("Formatting requested", "uri", docURI)
+	return []protocol.TextEdit{{
+		Range: protocol.Range{
+			Start: protocol.Position{},
+			End:   getEndOfDocument(st.Document),
 		},
-		Result: []protocol.TextEdit{
-			{
-				Range: protocol.Range{
-					Start: protocol.Position{
-						Line:      0,
-						Character: 0,
-					},
-					End: getEndOfDocument(st.Document),
-				},
-				NewText: string(formatted),
-			},
-		},
-	}
+		NewText: string(hclwrite.Format([]byte(st.Document))),
+	}}
 }
 
-func (s *State) PrepareRename(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.PrepareRenameResponse {
-	empty := lsp.PrepareRenameResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result:   nil,
-	}
-
+func (s *State) PrepareRename(l logger.Logger, docURI protocol.DocumentURI, position protocol.Position) (protocol.Range, string, bool) {
 	st, ok := s.Document(docURI)
 	if !ok || !canRename(st) {
-		return empty
+		return protocol.Range{}, "", false
 	}
-
 	target := rename.GetRenameTarget(l, st, position)
 	if target.Kind == "" {
-		return empty
+		return protocol.Range{}, "", false
 	}
-
-	return lsp.PrepareRenameResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result: &lsp.PrepareRenameResult{
-			Range:       target.IdentRange,
-			Placeholder: target.Name,
-		},
-	}
+	return target.IdentRange, target.Name, true
 }
 
-func (s *State) TextDocumentRename(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position, newName string) lsp.RenameResponse {
-	empty := lsp.RenameResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result:   nil,
-	}
-
+func (s *State) TextDocumentRename(l logger.Logger, docURI protocol.DocumentURI, position protocol.Position, newName string) *protocol.WorkspaceEdit {
 	st, ok := s.Document(docURI)
-	if !ok || !canRename(st) {
-		return empty
+	if !ok || !canRename(st) || !rename.IsValidIdentifier(newName) {
+		return nil
 	}
-
-	if !rename.IsValidIdentifier(newName) {
-		l.Debug(
-			"Rejecting invalid identifier",
-			"newName", newName,
-		)
-
-		return empty
-	}
-
 	target := rename.GetRenameTarget(l, st, position)
 	if target.Kind == "" {
-		return empty
+		return nil
 	}
-
 	occurrences := rename.FindAllOccurrences(target, docURI.Filename(), st)
 	if len(occurrences) == 0 {
-		return empty
+		return nil
 	}
-
 	edits := make([]protocol.TextEdit, 0, len(occurrences))
-
-	for _, occ := range occurrences {
+	for _, occurrence := range occurrences {
 		newText := newName
-		if occ.IsDefinition && (target.Kind == symbol.Dependency || target.Kind == symbol.Include) {
+		if occurrence.IsDefinition && (target.Kind == symbol.Dependency || target.Kind == symbol.Include) {
 			newText = strconv.Quote(newName)
 		}
-		edits = append(edits, protocol.TextEdit{
-			Range:   occ.Range,
-			NewText: newText,
-		})
+		edits = append(edits, protocol.TextEdit{Range: occurrence.Range, NewText: newText})
 	}
-
-	return lsp.RenameResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result: &protocol.WorkspaceEdit{
-			Changes: map[protocol.DocumentURI][]protocol.TextEdit{docURI: edits},
-		},
-	}
+	return &protocol.WorkspaceEdit{Changes: map[protocol.DocumentURI][]protocol.TextEdit{docURI: edits}}
 }
 
-// canRename reports whether rename can run against this store. It accepts any
-// HCL config or auxiliary file (e.g., common.hcl) but not stack/values files,
-// whose syntax does not have the renameable `local`/`include`/`dependency` constructs.
 func canRename(st store.Store) bool {
 	if st.AST == nil {
 		return false
 	}
-
 	return st.FileType == store.FileTypeUnit || st.FileType == store.FileTypeUnknown
 }
 
-func (s *State) TextDocumentReferences(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position, includeDeclaration bool) lsp.ReferencesResponse {
-	empty := lsp.ReferencesResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result:   nil,
-	}
-
+func (s *State) TextDocumentReferences(l logger.Logger, docURI protocol.DocumentURI, position protocol.Position, includeDeclaration bool) []protocol.Location {
 	st, ok := s.Document(docURI)
 	if !ok || !canRename(st) {
-		return empty
+		return []protocol.Location{}
 	}
-
 	locations := references.GetReferences(l, st, position, docURI.Filename(), includeDeclaration)
-	if len(locations) == 0 {
-		return empty
+	if locations == nil {
+		return []protocol.Location{}
 	}
-
-	return lsp.ReferencesResponse{
-		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
-		Result:   locations,
-	}
+	return locations
 }
 
 func getEndOfDocument(doc string) protocol.Position {

@@ -14,7 +14,6 @@ import (
 	"go.lsp.dev/protocol"
 
 	"terragrunt-ls/internal/logger"
-	"terragrunt-ls/internal/lsp"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 )
@@ -226,14 +225,93 @@ func TestStaleHoverReturnsHoverResultShape(t *testing.T) {
 	blockingLog.unblock()
 	require.NoError(t, <-hoverErr)
 	got := <-hoverResult
-	want, err := json.Marshal(lsp.HoverResult{})
-	require.NoError(t, err)
-	assert.JSONEq(t, string(want), string(got))
+	assert.Empty(t, got)
 
 	_, err = conn.Call(t.Context(), protocol.MethodShutdown, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, conn.Notify(t.Context(), protocol.MethodExit, nil))
 	require.NoError(t, <-done)
+}
+
+func TestFeatureResponseShapes(t *testing.T) {
+	t.Parallel()
+
+	serverSide, clientSide := net.Pipe()
+	t.Cleanup(func() { _ = clientSide.Close() })
+	server := New(testutils.NewTestLogger(t), tg.NewState())
+	done := make(chan error, 1)
+	go func() { done <- Serve(t.Context(), serverSide, server) }()
+
+	conn := jsonrpc2.NewConn(jsonrpc2.NewStream(clientSide))
+	diagnostics := make(chan protocol.PublishDiagnosticsParams, 1)
+	conn.Go(t.Context(), func(_ context.Context, _ jsonrpc2.Replier, req jsonrpc2.Request) error {
+		if req.Method() == protocol.MethodTextDocumentPublishDiagnostics {
+			var params protocol.PublishDiagnosticsParams
+			if err := decodeParams(req, &params); err != nil {
+				return err
+			}
+			diagnostics <- params
+		}
+		return nil
+	})
+
+	docURI := protocol.DocumentURI("file:///tmp/terragrunt.hcl")
+	document := "locals {\n  foo = \"bar\"\n}\ninputs = { value = local.foo }\n"
+	require.NoError(t, conn.Notify(t.Context(), protocol.MethodTextDocumentDidOpen, protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{URI: docURI, Version: 1, Text: document},
+	}))
+	_ = receiveDiagnostics(t, diagnostics)
+
+	position := protocol.Position{Line: 3, Character: 27}
+	calls := []struct {
+		method string
+		params any
+	}{
+		{protocol.MethodTextDocumentHover, protocol.HoverParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{protocol.MethodTextDocumentDefinition, protocol.DefinitionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{protocol.MethodTextDocumentReferences, protocol.ReferenceParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, Context: protocol.ReferenceContext{IncludeDeclaration: true}}},
+		{protocol.MethodTextDocumentPrepareRename, protocol.PrepareRenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{protocol.MethodTextDocumentRename, protocol.RenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, NewName: "renamed"}},
+		{protocol.MethodTextDocumentCompletion, protocol.CompletionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: protocol.Position{Line: 4, Character: 0}}}},
+		{protocol.MethodTextDocumentFormatting, protocol.DocumentFormattingParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}}},
+	}
+	for _, call := range calls {
+		var raw json.RawMessage
+		_, err := conn.Call(t.Context(), call.method, call.params, &raw)
+		require.NoError(t, err, call.method)
+		assertNoProtocolEnvelope(t, raw)
+	}
+
+	_, err := conn.Call(t.Context(), protocol.MethodShutdown, nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, conn.Notify(t.Context(), protocol.MethodExit, nil))
+	require.NoError(t, <-done)
+}
+
+func assertNoProtocolEnvelope(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	if len(raw) == 0 {
+		return
+	}
+	var value any
+	require.NoError(t, json.Unmarshal(raw, &value))
+	var inspect func(any)
+	inspect = func(current any) {
+		switch typed := current.(type) {
+		case map[string]any:
+			for _, key := range []string{"jsonrpc", "id", "result"} {
+				assert.NotContains(t, typed, key, string(raw))
+			}
+			for _, nested := range typed {
+				inspect(nested)
+			}
+		case []any:
+			for _, nested := range typed {
+				inspect(nested)
+			}
+		}
+	}
+	inspect(value)
 }
 
 func receiveDiagnostics(t *testing.T, diagnostics <-chan protocol.PublishDiagnosticsParams) protocol.PublishDiagnosticsParams {

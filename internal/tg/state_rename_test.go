@@ -66,17 +66,17 @@ inputs = { v = local.foo }`,
 			s := tg.NewState()
 			s.OpenDocument(t.Context(), l, docURI, tt.document, 1)
 
-			resp := s.PrepareRename(l, 1, docURI, tt.position)
+			renameRange, placeholder, found := s.PrepareRename(l, docURI, tt.position)
 
 			if tt.wantNil {
-				assert.Nil(t, resp.Result)
+				assert.False(t, found)
 				return
 			}
 
-			require.NotNil(t, resp.Result)
-			assert.Equal(t, tt.wantPlace, resp.Result.Placeholder)
-			assert.Equal(t, tt.wantStart, resp.Result.Range.Start)
-			assert.Equal(t, tt.wantEnd, resp.Result.Range.End)
+			require.True(t, found)
+			assert.Equal(t, tt.wantPlace, placeholder)
+			assert.Equal(t, tt.wantStart, renameRange.Start)
+			assert.Equal(t, tt.wantEnd, renameRange.End)
 		})
 	}
 }
@@ -95,8 +95,8 @@ func TestState_TextDocumentRename(t *testing.T) {
 		s := tg.NewState()
 		s.OpenDocument(t.Context(), l, docURI, `locals { foo = "bar" }`, 1)
 
-		resp := s.TextDocumentRename(l, 1, docURI, protocol.Position{Line: 0, Character: 9}, "1invalid")
-		assert.Nil(t, resp.Result)
+		resp := s.TextDocumentRename(l, docURI, protocol.Position{Line: 0, Character: 9}, "1invalid")
+		assert.Nil(t, resp)
 	})
 
 	t.Run("renames local declaration and references in same file", func(t *testing.T) {
@@ -121,11 +121,11 @@ inputs = {
 		s := tg.NewState()
 		s.OpenDocument(t.Context(), l, docURI, content, 1)
 
-		resp := s.TextDocumentRename(l, 1, docURI, protocol.Position{Line: 5, Character: 14}, "renamed")
-		require.NotNil(t, resp.Result)
-		require.NotNil(t, resp.Result.Changes)
+		resp := s.TextDocumentRename(l, docURI, protocol.Position{Line: 5, Character: 14}, "renamed")
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.Changes)
 
-		edits := resp.Result.Changes[docURI]
+		edits := resp.Changes[docURI]
 		require.Len(t, edits, 2, "definition + reference in the same file")
 
 		for _, edit := range edits {
@@ -144,8 +144,8 @@ inputs = {
 		s := tg.NewState()
 		s.OpenDocument(t.Context(), l, docURI, `locals { foo = "bar" }`, 1)
 
-		resp := s.TextDocumentRename(l, 1, docURI, protocol.Position{Line: 0, Character: 0}, "valid")
-		assert.Nil(t, resp.Result)
+		resp := s.TextDocumentRename(l, docURI, protocol.Position{Line: 0, Character: 0}, "valid")
+		assert.Nil(t, resp)
 	})
 
 	t.Run("works on auxiliary HCL files (FileTypeUnknown)", func(t *testing.T) {
@@ -159,10 +159,10 @@ inputs = {
 		s := tg.NewState()
 		s.OpenDocument(t.Context(), l, docURI, `locals { foo = "bar" }`, 1)
 
-		resp := s.TextDocumentRename(l, 1, docURI, protocol.Position{Line: 0, Character: 9}, "renamed")
-		require.NotNil(t, resp.Result)
+		resp := s.TextDocumentRename(l, docURI, protocol.Position{Line: 0, Character: 9}, "renamed")
+		require.NotNil(t, resp)
 
-		edits := resp.Result.Changes[docURI]
+		edits := resp.Changes[docURI]
 		require.Len(t, edits, 1)
 		assert.Equal(t, "renamed", edits[0].NewText)
 	})
@@ -221,14 +221,14 @@ inputs = {
 			state := tg.NewState()
 			state.OpenDocument(t.Context(), l, docURI, content, 1)
 
-			prepare := state.PrepareRename(l, 1, docURI, tt.position)
-			require.NotNil(t, prepare.Result)
-			assert.Equal(t, tt.prepareStart, prepare.Result.Range.Start)
-			assert.Equal(t, tt.prepareEnd, prepare.Result.Range.End)
+			prepareRange, _, found := state.PrepareRename(l, docURI, tt.position)
+			require.True(t, found)
+			assert.Equal(t, tt.prepareStart, prepareRange.Start)
+			assert.Equal(t, tt.prepareEnd, prepareRange.End)
 
-			rename := state.TextDocumentRename(l, 2, docURI, tt.position, tt.newName)
-			require.NotNil(t, rename.Result)
-			edits := rename.Result.Changes[docURI]
+			rename := state.TextDocumentRename(l, docURI, tt.position, tt.newName)
+			require.NotNil(t, rename)
+			edits := rename.Changes[docURI]
 			require.Len(t, edits, 2)
 			assert.Equal(t, tt.declarationAt, edits[0].Range.Start)
 			assert.Equal(t, "\""+tt.newName+"\"", edits[0].NewText)
