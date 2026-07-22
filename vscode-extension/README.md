@@ -46,6 +46,32 @@ The server provides the ability to format Terragrunt configuration files.
 
 When a Language Server client requests formatting, the server will format the document and return the formatted document to the client.
 
+## File names
+
+The extension recognizes Terragrunt's canonical filenames by default:
+
+- `terragrunt.hcl`
+- `root.hcl`
+- `terragrunt.stack.hcl`
+- `terragrunt.values.hcl`
+
+Use VS Code's native `files.associations` setting for additional Terragrunt files:
+
+```json
+{
+  "files.associations": {
+    "common.hcl": "terragrunt",
+    "*.terragrunt.hcl": "terragrunt"
+  }
+}
+```
+
+The language-based document selector also enables language-server features for these user-associated files.
+
+## Language server binary
+
+The packaged extension launches its bundled `out/terragrunt-ls` binary. Extension development mode runs the local source with `go run`. The extension does not download language-server releases at runtime.
+
 <!-- This README.md is displayed in the extension installation page, so try to keep the docs useful when user facing. -->
 
 ## Development

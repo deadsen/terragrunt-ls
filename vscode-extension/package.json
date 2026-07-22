@@ -19,7 +19,9 @@
 		"vscode": "^1.98.0"
 	},
 	"activationEvents": [
+		"onLanguage:terragrunt",
 		"workspaceContains:**/terragrunt.hcl",
+		"workspaceContains:**/root.hcl",
 		"workspaceContains:**/terragrunt.stack.hcl",
 		"workspaceContains:**/terragrunt.values.hcl"
 	],
@@ -31,6 +33,7 @@
 				"aliases": ["Terragrunt", "terragrunt"],
 				"filenames": [
 					"terragrunt.hcl",
+					"root.hcl",
 					"terragrunt.stack.hcl",
 					"terragrunt.values.hcl"
 				],
@@ -75,6 +78,7 @@
 	"scripts": {
 		"vscode:prepublish": "npm run compile && ./scripts/package.sh",
 		"compile": "tsc -b",
+		"test": "node --test out/test/*.test.js",
 		"watch": "tsc -b -w",
 		"lint": "eslint"
 	},

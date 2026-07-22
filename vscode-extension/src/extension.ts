@@ -59,8 +59,10 @@ export function activate(context: ExtensionContext) {
 			{ scheme: 'file', language: 'terragrunt' },
 		],
 		synchronize: {
-			// Notify the server about file changes to Terragrunt files
-			fileEvents: workspace.createFileSystemWatcher('**/*.hcl')
+			// Notify the server when canonical Terragrunt files change on disk.
+			fileEvents: workspace.createFileSystemWatcher(
+				'**/{terragrunt.hcl,root.hcl,terragrunt.stack.hcl,terragrunt.values.hcl}'
+			)
 		}
 	};
 
