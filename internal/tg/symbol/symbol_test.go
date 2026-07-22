@@ -85,3 +85,25 @@ inputs = {
 	assert.False(t, withoutDeclaration[0].Declaration)
 	assert.False(t, withoutDeclaration[1].Declaration)
 }
+
+func TestBlockLabelTargetHasQuotedOccurrenceAndBareEditRange(t *testing.T) {
+	t.Parallel()
+
+	source := `dependency "app" {
+  config_path = "../app"
+}`
+	indexed, err := ast.ParseHCLFile("terragrunt.hcl", []byte(source))
+	require.NoError(t, err)
+
+	target, ok := symbol.At(indexed, source, protocol.Position{Line: 0, Character: 13})
+	require.True(t, ok)
+
+	assert.Equal(t, protocol.Range{
+		Start: protocol.Position{Line: 0, Character: 11},
+		End:   protocol.Position{Line: 0, Character: 16},
+	}, ast.FromHCLRange(source, target.Range))
+	assert.Equal(t, protocol.Range{
+		Start: protocol.Position{Line: 0, Character: 12},
+		End:   protocol.Position{Line: 0, Character: 15},
+	}, ast.FromHCLRange(source, target.EditRange))
+}

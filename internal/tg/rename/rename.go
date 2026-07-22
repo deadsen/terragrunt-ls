@@ -12,23 +12,12 @@ import (
 	"go.lsp.dev/protocol"
 )
 
-const (
-	// RenameContextLocal is the context for renaming a local variable
-	// (`locals { name = ... }` and `local.name` references).
-	RenameContextLocal      = "local"
-	RenameContextDependency = "dependency"
-	RenameContextInclude    = "include"
-
-	// RenameContextNull means the cursor is not on a renameable identifier.
-	RenameContextNull = "null"
-)
-
 // RenameTarget describes the symbol resolved at the cursor position.
 type RenameTarget struct {
 	// Name is the current identifier value.
 	Name string
-	// Context is one of the RenameContext* constants.
-	Context string
+	// Kind is the Terragrunt symbol namespace.
+	Kind symbol.Kind
 	// IdentRange is the LSP range covering only the identifier token, suitable
 	// for use as the prepare-rename range.
 	IdentRange protocol.Range
@@ -52,10 +41,9 @@ func IsValidIdentifier(s string) bool {
 }
 
 // GetRenameTarget identifies the renameable symbol at the given position.
-// Returns a target with Context == RenameContextNull when nothing renameable
-// is at the position.
+// Returns a target with an empty Kind when nothing renameable is at the position.
 func GetRenameTarget(l logger.Logger, st store.Store, position protocol.Position) RenameTarget {
-	null := RenameTarget{Context: RenameContextNull}
+	null := RenameTarget{}
 
 	if st.AST == nil {
 		l.Debug("No AST found for rename")
@@ -70,8 +58,8 @@ func GetRenameTarget(l logger.Logger, st store.Store, position protocol.Position
 
 	return RenameTarget{
 		Name:       target.Name,
-		Context:    string(target.Kind),
-		IdentRange: ast.FromHCLRange(st.Document, target.Range),
+		Kind:       target.Kind,
+		IdentRange: ast.FromHCLRange(st.Document, target.EditRange),
 	}
 }
 
@@ -79,11 +67,11 @@ func GetRenameTarget(l logger.Logger, st store.Store, position protocol.Position
 // AST: the declaration site (when present) plus all references. The returned
 // slice is sorted by (line, column) for determinism.
 func FindAllOccurrences(target RenameTarget, file string, st store.Store) []Occurrence {
-	if target.Context == RenameContextNull || st.AST == nil {
+	if target.Kind == "" || st.AST == nil {
 		return nil
 	}
 
-	resolved := symbol.Target{Kind: symbol.Kind(target.Context), Name: target.Name}
+	resolved := symbol.Target{Kind: target.Kind, Name: target.Name}
 	symbolOccurrences := symbol.Occurrences(st.AST, st.Document, resolved, true)
 	occurrences := make([]Occurrence, 0, len(symbolOccurrences))
 	for _, occurrence := range symbolOccurrences {

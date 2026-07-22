@@ -25,6 +25,7 @@ type Target struct {
 	Kind        Kind
 	Name        string
 	Range       hcl.Range
+	EditRange   hcl.Range
 	Declaration bool
 }
 
@@ -49,7 +50,7 @@ func At(indexed *ast.IndexedAST, source string, position protocol.Position) (Tar
 		switch typed := current.Node.(type) {
 		case *hclsyntax.Attribute:
 			if ast.IsLocalAttribute(current) && containsPosition(ast.FromHCLRange(source, typed.NameRange), position) {
-				return Target{Kind: Local, Name: typed.Name, Range: typed.NameRange, Declaration: true}, true
+				return Target{Kind: Local, Name: typed.Name, Range: typed.NameRange, EditRange: typed.NameRange, Declaration: true}, true
 			}
 		case *hclsyntax.Block:
 			kind, ok := blockKind(current)
@@ -58,7 +59,13 @@ func At(indexed *ast.IndexedAST, source string, position protocol.Position) (Tar
 			}
 
 			if containsPosition(ast.FromHCLRange(source, typed.LabelRanges[0]), position) {
-				return Target{Kind: kind, Name: typed.Labels[0], Range: typed.LabelRanges[0], Declaration: true}, true
+				return Target{
+					Kind:        kind,
+					Name:        typed.Labels[0],
+					Range:       typed.LabelRanges[0],
+					EditRange:   bareLabelRange(typed.LabelRanges[0]),
+					Declaration: true,
+				}, true
 			}
 		case *hclsyntax.ScopeTraversalExpr:
 			if target, ok := traversalTarget(typed, source, position); ok {
@@ -142,7 +149,19 @@ func traversalTarget(expr *hclsyntax.ScopeTraversalExpr, source string, position
 		return Target{}, false
 	}
 
-	return Target{Kind: kind, Name: attribute.Name, Range: identifierRange}, true
+	return Target{Kind: kind, Name: attribute.Name, Range: identifierRange, EditRange: identifierRange}, true
+}
+
+func bareLabelRange(labelRange hcl.Range) hcl.Range {
+	result := labelRange
+	if result.End.Byte-result.Start.Byte >= 2 {
+		result.Start.Byte++
+		result.Start.Column++
+		result.End.Byte--
+		result.End.Column--
+	}
+
+	return result
 }
 
 func traversalKind(root string) (Kind, bool) {

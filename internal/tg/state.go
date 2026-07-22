@@ -2,6 +2,7 @@ package tg
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"terragrunt-ls/internal/ast"
@@ -13,13 +14,13 @@ import (
 	"terragrunt-ls/internal/tg/references"
 	"terragrunt-ls/internal/tg/rename"
 	"terragrunt-ls/internal/tg/store"
+	"terragrunt-ls/internal/tg/symbol"
 	"terragrunt-ls/internal/tg/text"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"go.lsp.dev/protocol"
-	"go.lsp.dev/uri"
 )
 
 type State struct {
@@ -397,7 +398,7 @@ func (s *State) PrepareRename(l logger.Logger, id int, docURI protocol.DocumentU
 	}
 
 	target := rename.GetRenameTarget(l, st, position)
-	if target.Context == rename.RenameContextNull {
+	if target.Kind == "" {
 		return empty
 	}
 
@@ -431,7 +432,7 @@ func (s *State) TextDocumentRename(l logger.Logger, id int, docURI protocol.Docu
 	}
 
 	target := rename.GetRenameTarget(l, st, position)
-	if target.Context == rename.RenameContextNull {
+	if target.Kind == "" {
 		return empty
 	}
 
@@ -440,20 +441,23 @@ func (s *State) TextDocumentRename(l logger.Logger, id int, docURI protocol.Docu
 		return empty
 	}
 
-	changes := map[protocol.DocumentURI][]protocol.TextEdit{}
+	edits := make([]protocol.TextEdit, 0, len(occurrences))
 
 	for _, occ := range occurrences {
-		fileURI := uri.File(occ.File)
-		changes[fileURI] = append(changes[fileURI], protocol.TextEdit{
+		newText := newName
+		if occ.IsDefinition && (target.Kind == symbol.Dependency || target.Kind == symbol.Include) {
+			newText = strconv.Quote(newName)
+		}
+		edits = append(edits, protocol.TextEdit{
 			Range:   occ.Range,
-			NewText: newName,
+			NewText: newText,
 		})
 	}
 
 	return lsp.RenameResponse{
 		Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
 		Result: &protocol.WorkspaceEdit{
-			Changes: changes,
+			Changes: map[protocol.DocumentURI][]protocol.TextEdit{docURI: edits},
 		},
 	}
 }

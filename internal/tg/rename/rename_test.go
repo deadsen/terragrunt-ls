@@ -5,6 +5,7 @@ import (
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 	"terragrunt-ls/internal/tg/rename"
+	"terragrunt-ls/internal/tg/symbol"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,26 +46,26 @@ func TestGetRenameTarget(t *testing.T) {
 	t.Parallel()
 
 	tc := []struct {
-		name            string
-		document        string
-		expectedName    string
-		expectedContext string
-		position        protocol.Position
+		name         string
+		document     string
+		expectedName string
+		expectedKind symbol.Kind
+		position     protocol.Position
 	}{
 		{
-			name:            "empty document",
-			document:        "",
-			position:        protocol.Position{Line: 0, Character: 0},
-			expectedContext: rename.RenameContextNull,
+			name:         "empty document",
+			document:     "",
+			position:     protocol.Position{Line: 0, Character: 0},
+			expectedKind: "",
 		},
 		{
 			name: "cursor on local definition",
 			document: `locals {
   foo = "bar"
 }`,
-			position:        protocol.Position{Line: 1, Character: 3},
-			expectedName:    "foo",
-			expectedContext: rename.RenameContextLocal,
+			position:     protocol.Position{Line: 1, Character: 3},
+			expectedName: "foo",
+			expectedKind: symbol.Local,
 		},
 		{
 			name: "cursor on local reference",
@@ -74,40 +75,40 @@ func TestGetRenameTarget(t *testing.T) {
 inputs = {
   v = local.foo
 }`,
-			position:        protocol.Position{Line: 4, Character: 14},
-			expectedName:    "foo",
-			expectedContext: rename.RenameContextLocal,
+			position:     protocol.Position{Line: 4, Character: 14},
+			expectedName: "foo",
+			expectedKind: symbol.Local,
 		},
 		{
-			name:            "cursor on local keyword in reference",
-			document:        `inputs = { v = local.foo }`,
-			position:        protocol.Position{Line: 0, Character: 16},
-			expectedName:    "foo",
-			expectedContext: rename.RenameContextLocal,
+			name:         "cursor on local keyword in reference",
+			document:     `inputs = { v = local.foo }`,
+			position:     protocol.Position{Line: 0, Character: 16},
+			expectedName: "foo",
+			expectedKind: symbol.Local,
 		},
 		{
 			name: "cursor on unrelated traversal root",
 			document: `inputs = {
   v = path.module
 }`,
-			position:        protocol.Position{Line: 1, Character: 8},
-			expectedContext: rename.RenameContextNull,
+			position:     protocol.Position{Line: 1, Character: 8},
+			expectedKind: "",
 		},
 		{
 			name: "cursor on locals block keyword",
 			document: `locals {
   foo = "bar"
 }`,
-			position:        protocol.Position{Line: 0, Character: 3},
-			expectedContext: rename.RenameContextNull,
+			position:     protocol.Position{Line: 0, Character: 3},
+			expectedKind: "",
 		},
 		{
 			name: "cursor on whitespace",
 			document: `locals {
   foo = "bar"
 }`,
-			position:        protocol.Position{Line: 1, Character: 0},
-			expectedContext: rename.RenameContextNull,
+			position:     protocol.Position{Line: 1, Character: 0},
+			expectedKind: "",
 		},
 	}
 
@@ -123,8 +124,8 @@ inputs = {
 
 			target := rename.GetRenameTarget(l, s.Configs[docURI.Filename()], tt.position)
 
-			assert.Equal(t, tt.expectedContext, target.Context)
-			if tt.expectedContext != rename.RenameContextNull {
+			assert.Equal(t, tt.expectedKind, target.Kind)
+			if tt.expectedKind != "" {
 				assert.Equal(t, tt.expectedName, target.Name)
 			}
 		})
@@ -160,7 +161,7 @@ dependency "b" {
 	st := s.Configs[hclPath]
 
 	target := rename.GetRenameTarget(l, st, protocol.Position{Line: 1, Character: 3})
-	require.Equal(t, rename.RenameContextLocal, target.Context)
+	require.Equal(t, symbol.Local, target.Kind)
 	require.Equal(t, "foo", target.Name)
 
 	occs := rename.FindAllOccurrences(target, hclPath, st)
@@ -201,7 +202,7 @@ func TestFindAllOccurrences_NoDefinition(t *testing.T) {
 	st := s.Configs[hclPath]
 
 	target := rename.GetRenameTarget(l, st, protocol.Position{Line: 1, Character: 14})
-	require.Equal(t, rename.RenameContextLocal, target.Context)
+	require.Equal(t, symbol.Local, target.Kind)
 	require.Equal(t, "shared", target.Name)
 
 	occs := rename.FindAllOccurrences(target, hclPath, st)

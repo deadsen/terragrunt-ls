@@ -167,3 +167,73 @@ inputs = {
 		assert.Equal(t, "renamed", edits[0].NewText)
 	})
 }
+
+func TestState_DependencyAndIncludeRename(t *testing.T) {
+	t.Parallel()
+
+	content := `dependency "app" {
+  config_path = "../app"
+}
+
+include "root" {
+  path = "root.hcl"
+}
+
+inputs = {
+  id = dependency.app.outputs.id
+  x  = include.root.inputs.x
+}`
+	tests := []struct {
+		name          string
+		position      protocol.Position
+		newName       string
+		prepareStart  protocol.Position
+		prepareEnd    protocol.Position
+		declarationAt protocol.Position
+		referenceAt   protocol.Position
+	}{
+		{
+			name:          "dependency",
+			position:      protocol.Position{Line: 0, Character: 13},
+			newName:       "service",
+			prepareStart:  protocol.Position{Line: 0, Character: 12},
+			prepareEnd:    protocol.Position{Line: 0, Character: 15},
+			declarationAt: protocol.Position{Line: 0, Character: 11},
+			referenceAt:   protocol.Position{Line: 9, Character: 18},
+		},
+		{
+			name:          "include",
+			position:      protocol.Position{Line: 4, Character: 10},
+			newName:       "parent",
+			prepareStart:  protocol.Position{Line: 4, Character: 9},
+			prepareEnd:    protocol.Position{Line: 4, Character: 13},
+			declarationAt: protocol.Position{Line: 4, Character: 8},
+			referenceAt:   protocol.Position{Line: 10, Character: 15},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			tgPath := filepath.Join(tmpDir, "terragrunt.hcl")
+			docURI := uri.File(tgPath)
+			l := testutils.NewTestLogger(t)
+			state := tg.NewState()
+			state.OpenDocument(t.Context(), l, docURI, content, 1)
+
+			prepare := state.PrepareRename(l, 1, docURI, tt.position)
+			require.NotNil(t, prepare.Result)
+			assert.Equal(t, tt.prepareStart, prepare.Result.Range.Start)
+			assert.Equal(t, tt.prepareEnd, prepare.Result.Range.End)
+
+			rename := state.TextDocumentRename(l, 2, docURI, tt.position, tt.newName)
+			require.NotNil(t, rename.Result)
+			edits := rename.Result.Changes[docURI]
+			require.Len(t, edits, 2)
+			assert.Equal(t, tt.declarationAt, edits[0].Range.Start)
+			assert.Equal(t, "\""+tt.newName+"\"", edits[0].NewText)
+			assert.Equal(t, tt.referenceAt, edits[1].Range.Start)
+			assert.Equal(t, tt.newName, edits[1].NewText)
+		})
+	}
+}
