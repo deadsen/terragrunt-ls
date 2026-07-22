@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 	"terragrunt-ls/internal/tg/definition"
@@ -134,4 +135,50 @@ inputs = {
 			assert.Equal(t, tt.line, locations[0].Range.Start.Line)
 		})
 	}
+}
+
+func TestResolveFileThroughFindInParentFolders(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	sourceDir := filepath.Join(rootDir, "environments", "development")
+	require.NoError(t, os.MkdirAll(sourceDir, 0o755))
+
+	environmentFile := filepath.Join(rootDir, "environment.yaml")
+	require.NoError(t, os.WriteFile(environmentFile, []byte("name: development\n"), 0o600))
+
+	source := `locals {
+  environment = yamldecode(file("${find_in_parent_folders("environment.yaml")}"))
+}`
+	sourceFile := filepath.Join(sourceDir, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(source), 0o600))
+
+	docURI := uri.File(sourceFile)
+	state := tg.NewState()
+	require.Empty(t, state.OpenDocument(t.Context(), testutils.NewTestLogger(t), docURI, source, 1))
+	st := state.Configs[sourceFile]
+
+	for _, target := range []string{"find_in_parent_folders", "environment.yaml"} {
+		t.Run(target, func(t *testing.T) {
+			locations := definition.Resolve(st, docURI, positionWithin(source, target))
+
+			require.Len(t, locations, 1)
+			assert.Equal(t, uri.File(environmentFile), locations[0].URI)
+		})
+	}
+
+	require.NoError(t, os.Remove(environmentFile))
+	assert.Empty(t, definition.Resolve(st, docURI, positionWithin(source, "environment.yaml")))
+}
+
+func positionWithin(source, target string) protocol.Position {
+	offset := strings.Index(source, target)
+	if offset < 0 {
+		return protocol.Position{}
+	}
+	offset += len(target) / 2
+	prefix := source[:offset]
+	lines := strings.Split(prefix, "\n")
+
+	return protocol.Position{Line: uint32(len(lines) - 1), Character: uint32(len(lines[len(lines)-1]))}
 }

@@ -64,7 +64,7 @@ func (s *Server) initialize() protocol.InitializeResult {
 				Commands: []string{ResolveDependencyOutputsCommand},
 			},
 		},
-		ServerInfo: &protocol.ServerInfo{Name: "terragrunt-ls", Version: "0.0.1"},
+		ServerInfo: &protocol.ServerInfo{Name: "terragrunt-ls", Version: "0.1.0"},
 	}
 }
 

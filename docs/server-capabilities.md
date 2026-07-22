@@ -19,7 +19,7 @@ Go to Definition resolves:
 - local references to their declaration in the current document;
 - include declarations and references to the evaluated include file;
 - dependency declarations and references to the dependency's Terragrunt configuration;
-- `file(...)` calls with a locally evaluable string path to the referenced file.
+- `file(...)` calls with a locally evaluable string path to the referenced file, including paths produced by `find_in_parent_folders(...)` inside string templates.
 
 ## References and rename
 

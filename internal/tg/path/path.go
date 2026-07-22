@@ -9,10 +9,14 @@ import (
 	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/tg/store"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/function"
 )
+
+const maxParentFolders = 100
 
 // ResolutionError describes a path that could not be safely resolved.
 type ResolutionError struct {
@@ -119,6 +123,8 @@ func Include(st store.Store, name string) (string, error) {
 }
 
 // FileCall resolves the first string argument of the enclosing file(...) call.
+// Its restricted evaluation context supports locals and find_in_parent_folders
+// without enabling functions that can execute commands or access the network.
 func FileCall(st store.Store, node *ast.IndexedNode) (string, error) {
 	callNode := ast.FindFirstParentMatch(node, func(candidate *ast.IndexedNode) bool {
 		call, ok := candidate.Node.(*hclsyntax.FunctionCallExpr)
@@ -146,7 +152,12 @@ func FileCall(st store.Store, node *ast.IndexedNode) (string, error) {
 }
 
 func localEvalContext(st store.Store) *hcl.EvalContext {
-	context := &hcl.EvalContext{Variables: map[string]cty.Value{}}
+	context := &hcl.EvalContext{
+		Functions: map[string]function.Function{
+			config.FuncNameFindInParentFolders: findInParentFoldersFunction(sourceFilename(st)),
+		},
+		Variables: map[string]cty.Value{},
+	}
 	if st.CfgAsCty == cty.NilVal || st.CfgAsCty.IsMarked() || !st.CfgAsCty.IsKnown() || st.CfgAsCty.IsNull() {
 		return context
 	}
@@ -161,6 +172,63 @@ func localEvalContext(st store.Store) *hcl.EvalContext {
 	context.Variables["local"] = locals
 
 	return context
+}
+
+func findInParentFoldersFunction(sourceFile string) function.Function {
+	return function.New(&function.Spec{
+		VarParam: &function.Parameter{Type: cty.String},
+		Type:     function.StaticReturnType(cty.String),
+		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			if len(args) > 2 {
+				return cty.NilVal, fmt.Errorf("find_in_parent_folders expects zero, one, or two arguments")
+			}
+
+			params := make([]string, 0, len(args))
+			for _, arg := range args {
+				if !arg.IsKnown() || arg.IsNull() {
+					return cty.NilVal, fmt.Errorf("find_in_parent_folders arguments must be known strings")
+				}
+				params = append(params, arg.AsString())
+			}
+
+			resolved, err := findInParentFolders(sourceFile, params)
+			if err != nil {
+				return cty.NilVal, err
+			}
+
+			return cty.StringVal(resolved), nil
+		},
+	})
+}
+
+func findInParentFolders(sourceFile string, params []string) (string, error) {
+	filename := "terragrunt.hcl"
+	if len(params) > 0 && params[0] != "" {
+		filename = params[0]
+	}
+
+	currentDir, err := filepath.Abs(filepath.Dir(sourceFile))
+	if err != nil {
+		return "", err
+	}
+
+	for range maxParentFolders {
+		parentDir := filepath.Dir(currentDir)
+		if parentDir == currentDir {
+			if len(params) == 2 {
+				return params[1], nil
+			}
+			return "", fmt.Errorf("find_in_parent_folders could not find %q", filename)
+		}
+
+		candidate := filepath.Join(parentDir, filename)
+		if info, statErr := os.Stat(candidate); statErr == nil && info.Mode().IsRegular() {
+			return candidate, nil
+		}
+		currentDir = parentDir
+	}
+
+	return "", fmt.Errorf("find_in_parent_folders exceeded %d parent directories", maxParentFolders)
 }
 
 func stringValue(operation, name string, value cty.Value) (string, error) {

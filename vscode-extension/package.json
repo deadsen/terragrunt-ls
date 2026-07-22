@@ -5,7 +5,7 @@
 	"author": "Gruntwork",
 	"license": "MPL-2.0",
 	"icon": "images/icon.png",
-	"version": "0.0.5",
+	"version": "0.1.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/gruntwork-io/terragrunt-ls.git"
@@ -30,7 +30,10 @@
 		"languages": [
 			{
 				"id": "terragrunt",
-				"aliases": ["Terragrunt", "terragrunt"],
+				"aliases": [
+					"Terragrunt",
+					"terragrunt"
+				],
 				"filenames": [
 					"terragrunt.hcl",
 					"root.hcl",
@@ -94,7 +97,7 @@
 		"@types/vscode": "^1.75.1",
 		"@vscode/test-electron": "^2.3.9",
 		"eslint": "^9.13.0",
-		"mocha": "^10.3.0",
+		"mocha": "^11.7.6",
 		"nodemon": "^3.1.9",
 		"typescript": "^5.8.2",
 		"typescript-eslint": "^8.26.0"
