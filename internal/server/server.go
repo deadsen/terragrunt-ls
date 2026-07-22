@@ -15,14 +15,14 @@ import (
 
 type Server struct {
 	log      logger.Logger
-	state    tg.State
+	state    *tg.State
 	client   Client
 	conn     jsonrpc2.Conn
 	shutdown atomic.Bool
 	exited   chan struct{}
 }
 
-func New(log logger.Logger, state tg.State) *Server {
+func New(log logger.Logger, state *tg.State) *Server {
 	return &Server{log: log, state: state, exited: make(chan struct{})}
 }
 

@@ -26,47 +26,76 @@ import (
 
 type State struct {
 	// Map of file names to Terragrunt configs
-	mu      sync.RWMutex
-	Configs map[string]store.Store
+	mu          sync.RWMutex
+	Configs     map[string]store.Store
+	generations map[string]uint64
 }
 
-func NewState() State {
-	return State{Configs: map[string]store.Store{}}
+func NewState() *State {
+	return &State{
+		Configs:     map[string]store.Store{},
+		generations: map[string]uint64{},
+	}
 }
 
 func (s *State) OpenDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
+	diagnostics, _ := s.OpenDocumentWithStatus(ctx, l, docURI, text, version)
+	return diagnostics
+}
+
+func (s *State) OpenDocumentWithStatus(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) ([]protocol.Diagnostic, bool) {
+	generation := s.generation(docURI)
+
 	l.Debug(
 		"Opening document",
 		"uri", docURI,
 		"text", text,
 	)
 
-	return s.updateState(ctx, l, docURI, text, version)
+	return s.updateStateAtGeneration(ctx, l, docURI, text, version, generation)
 }
 
 func (s *State) UpdateDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
+	diagnostics, _ := s.UpdateDocumentWithStatus(ctx, l, docURI, text, version)
+	return diagnostics
+}
+
+func (s *State) UpdateDocumentWithStatus(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) ([]protocol.Diagnostic, bool) {
+	generation := s.generation(docURI)
+
 	l.Debug(
 		"Updating document",
 		"uri", docURI,
 		"text", text,
 	)
 
-	return s.updateState(ctx, l, docURI, text, version)
+	return s.updateStateAtGeneration(ctx, l, docURI, text, version, generation)
 }
 
 func (s *State) SaveDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI) []protocol.Diagnostic {
-	st, ok := s.Document(docURI)
+	diagnostics, _ := s.SaveDocumentWithStatus(ctx, l, docURI)
+	return diagnostics
+}
+
+func (s *State) SaveDocumentWithStatus(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI) ([]protocol.Diagnostic, bool) {
+	filename := docURI.Filename()
+
+	s.mu.RLock()
+	st, ok := s.Configs[filename]
+	generation := s.generations[filename]
+	s.mu.RUnlock()
 	if !ok {
-		return []protocol.Diagnostic{}
+		return []protocol.Diagnostic{}, false
 	}
 
-	return s.updateState(ctx, l, docURI, st.Document, st.Version)
+	return s.updateStateAtGeneration(ctx, l, docURI, st.Document, st.Version, generation)
 }
 
 func (s *State) CloseDocument(docURI protocol.DocumentURI) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.generations[docURI.Filename()]++
 	delete(s.Configs, docURI.Filename())
 }
 
@@ -86,14 +115,25 @@ func (s *State) IsCurrent(docURI protocol.DocumentURI, version int32) bool {
 	return ok && st.Version == version
 }
 
-func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
+func (s *State) generation(docURI protocol.DocumentURI) uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.generations[docURI.Filename()]
+}
+
+func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32, generation uint64) ([]protocol.Diagnostic, bool) {
 	filename := docURI.Filename()
 
 	s.mu.RLock()
+	currentGeneration := s.generations[filename]
 	current, ok := s.Configs[filename]
 	s.mu.RUnlock()
+	if generation != currentGeneration {
+		return []protocol.Diagnostic{}, false
+	}
 	if ok && version < current.Version {
-		return []protocol.Diagnostic{}
+		return []protocol.Diagnostic{}, false
 	}
 
 	fileType := DetectFileType(filename)
@@ -156,14 +196,18 @@ func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protoco
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if generation != s.generations[filename] {
+		return []protocol.Diagnostic{}, false
+	}
+
 	current, ok = s.Configs[filename]
 	if ok && version < current.Version {
-		return []protocol.Diagnostic{}
+		return []protocol.Diagnostic{}, false
 	}
 
 	s.Configs[filename] = st
 
-	return diags
+	return diags, true
 }
 
 func (s *State) Hover(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.HoverResponse {

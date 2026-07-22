@@ -1,10 +1,13 @@
 package tg_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -12,6 +15,7 @@ import (
 	"go.lsp.dev/protocol"
 	"go.lsp.dev/uri"
 
+	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/lsp"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
@@ -39,14 +43,132 @@ func TestStateVersionedLifecycle(t *testing.T) {
 	assert.Equal(t, store.FileTypeUnit, st.FileType)
 	assert.Equal(t, int32(3), st.Version)
 
-	s.UpdateDocument(t.Context(), l, uri, "locals { a = 2 }", 2)
+	_, applied := s.UpdateDocumentWithStatus(t.Context(), l, uri, "locals { a = 2 }", 2)
+	assert.False(t, applied)
 	st, _ = s.Document(uri)
 	assert.Equal(t, "locals { a = 1 }", st.Document)
 
-	require.Empty(t, s.SaveDocument(t.Context(), l, uri))
+	invalid := "locals {"
+	require.NotEmpty(t, s.UpdateDocument(t.Context(), l, uri, invalid, 4))
+	require.NotEmpty(t, s.SaveDocument(t.Context(), l, uri), "save must reanalyse the stored document")
 	s.CloseDocument(uri)
 	_, ok = s.Document(uri)
 	assert.False(t, ok)
+}
+
+func TestStateSaveDoesNotRestoreClosedDocument(t *testing.T) {
+	t.Parallel()
+
+	l := testutils.NewTestLogger(t)
+	s := tg.NewState()
+	uri := protocol.DocumentURI("file:///tmp/save-close.hcl")
+	require.Empty(t, s.OpenDocument(t.Context(), l, uri, "locals { value = 1 }", 1))
+
+	blockingLog := newBlockingDebugLogger(l, "Config")
+	done := make(chan bool, 1)
+	go func() {
+		_, applied := s.SaveDocumentWithStatus(t.Context(), blockingLog, uri)
+		done <- applied
+	}()
+
+	blockingLog.wait(t)
+	s.CloseDocument(uri)
+	blockingLog.unblock()
+	assert.False(t, <-done)
+
+	_, ok := s.Document(uri)
+	assert.False(t, ok)
+}
+
+func TestStateCloseThenReopenRejectsPreviousLifecycle(t *testing.T) {
+	t.Parallel()
+
+	l := testutils.NewTestLogger(t)
+	s := tg.NewState()
+	uri := protocol.DocumentURI("file:///tmp/close-reopen.hcl")
+	blockingLog := newBlockingDebugLogger(l, "Config")
+	done := make(chan bool, 1)
+	go func() {
+		_, applied := s.OpenDocumentWithStatus(t.Context(), blockingLog, uri, "locals { value = \"old\" }", 1)
+		done <- applied
+	}()
+
+	blockingLog.wait(t)
+	s.CloseDocument(uri)
+	require.Empty(t, s.OpenDocument(t.Context(), l, uri, "locals { value = \"new\" }", 1))
+	blockingLog.unblock()
+	assert.False(t, <-done)
+
+	st, ok := s.Document(uri)
+	require.True(t, ok)
+	assert.Equal(t, "locals { value = \"new\" }", st.Document)
+}
+
+func TestStateConcurrentDocumentAccess(t *testing.T) {
+	t.Parallel()
+
+	l := testutils.NewTestLogger(t)
+	s := tg.NewState()
+	const documents = 8
+
+	var wg sync.WaitGroup
+	for i := range documents {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			uri := protocol.DocumentURI(fmt.Sprintf("file:///tmp/concurrent-%d.hcl", i))
+			s.OpenDocument(t.Context(), l, uri, "locals { value = 1 }", 1)
+			s.UpdateDocument(t.Context(), l, uri, "locals { value = 2 }", 2)
+			_, _ = s.Document(uri)
+		}()
+	}
+	wg.Wait()
+
+	for i := range documents {
+		uri := protocol.DocumentURI(fmt.Sprintf("file:///tmp/concurrent-%d.hcl", i))
+		st, ok := s.Document(uri)
+		require.True(t, ok)
+		assert.Equal(t, int32(2), st.Version)
+	}
+}
+
+type blockingDebugLogger struct {
+	logger.Logger
+	message string
+	reached chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func newBlockingDebugLogger(l logger.Logger, message string) *blockingDebugLogger {
+	return &blockingDebugLogger{
+		Logger:  l,
+		message: message,
+		reached: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (l *blockingDebugLogger) Debug(message string, args ...any) {
+	if message == l.message {
+		l.once.Do(func() { close(l.reached) })
+		<-l.release
+	}
+	l.Logger.Debug(message, args...)
+}
+
+func (l *blockingDebugLogger) wait(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-l.reached:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for analysis to reach commit boundary")
+	}
+}
+
+func (l *blockingDebugLogger) unblock() {
+	close(l.release)
 }
 
 func TestState_OpenDocument(t *testing.T) {

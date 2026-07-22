@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"terragrunt-ls/internal/lsp"
 
 	"go.lsp.dev/jsonrpc2"
 	"go.lsp.dev/protocol"
@@ -39,7 +40,10 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			diagnostics := s.state.OpenDocument(ctx, s.log, params.TextDocument.URI, params.TextDocument.Text, params.TextDocument.Version)
+			diagnostics, applied := s.state.OpenDocumentWithStatus(ctx, s.log, params.TextDocument.URI, params.TextDocument.Text, params.TextDocument.Version)
+			if !applied {
+				return respond(nil, nil)
+			}
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -54,7 +58,10 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, nil)
 			}
 			change := params.ContentChanges[len(params.ContentChanges)-1]
-			diagnostics := s.state.UpdateDocument(ctx, s.log, params.TextDocument.URI, change.Text, params.TextDocument.Version)
+			diagnostics, applied := s.state.UpdateDocumentWithStatus(ctx, s.log, params.TextDocument.URI, change.Text, params.TextDocument.Version)
+			if !applied {
+				return respond(nil, nil)
+			}
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -65,7 +72,10 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			diagnostics := s.state.SaveDocument(ctx, s.log, params.TextDocument.URI)
+			diagnostics, applied := s.state.SaveDocumentWithStatus(ctx, s.log, params.TextDocument.URI)
+			if !applied {
+				return respond(nil, nil)
+			}
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -91,7 +101,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			st, ok := s.state.Document(params.TextDocument.URI)
 			result := s.state.Hover(s.log, 0, params.TextDocument.URI, params.Position).Result
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
-				return respond(protocol.MarkupContent{}, nil)
+				return respond(lsp.HoverResult{}, nil)
 			}
 			return respond(result, nil)
 
