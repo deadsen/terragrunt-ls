@@ -45,6 +45,10 @@ zed::register_extension!(TerragruntLsExtension);
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    use tree_sitter::{Parser, Query, QueryCursor, StreamingIterator};
+
+    const HIGHLIGHTS_QUERY: &str = include_str!("../languages/terragrunt/highlights.scm");
+    const LANGUAGE_CONFIG: &str = include_str!("../languages/terragrunt/config.toml");
 
     #[test]
     fn configured_binary_wins() {
@@ -76,5 +80,94 @@ mod tests {
         let error = resolve_command(None, None).unwrap_err();
 
         assert!(error.contains("terragrunt-ls"));
+    }
+
+    #[test]
+    fn traversal_levels_have_distinct_highlight_scopes() {
+        let source = r#"
+inputs = {
+  cluster = dependency.ecs-task-execution-role.outputs.cluster_name
+  tags    = local.account.tags
+  env     = include.root.locals.environment
+  deep    = dependency.one.two.three.four.five.six.seven.eight
+}
+"#;
+
+        let captures = highlight_captures(source);
+
+        for expected in [
+            ("dependency", "type"),
+            ("ecs-task-execution-role", "property"),
+            ("outputs", "attribute"),
+            ("cluster_name", "variable.special"),
+            ("local", "type"),
+            ("account", "property"),
+            ("tags", "attribute"),
+            ("include", "type"),
+            ("root", "property"),
+            ("locals", "attribute"),
+            ("environment", "variable.special"),
+            ("one", "property"),
+            ("two", "attribute"),
+            ("three", "variable.special"),
+            ("four", "property"),
+            ("five", "attribute"),
+            ("six", "variable.special"),
+            ("seven", "property"),
+            ("eight", "attribute"),
+        ] {
+            assert!(
+                captures
+                    .iter()
+                    .any(|capture| capture.0 == expected.0 && capture.1 == expected.1),
+                "missing capture {expected:?}; got {captures:?}"
+            );
+        }
+
+        assert!(
+            captures.iter().all(|capture| capture.1 != "tag"),
+            "traversal depth highlighting must not repurpose tag captures: {captures:?}"
+        );
+    }
+
+    #[test]
+    fn hyphenated_identifiers_are_single_editor_words() {
+        assert!(
+            LANGUAGE_CONFIG
+                .lines()
+                .any(|line| line.trim() == r#"word_characters = ["-"]"#),
+            "Terragrunt language config must include '-' in word_characters"
+        );
+    }
+
+    fn highlight_captures(source: &str) -> Vec<(String, String)> {
+        let language = tree_sitter_hcl::LANGUAGE.into();
+        let mut parser = Parser::new();
+        parser
+            .set_language(&language)
+            .expect("HCL grammar should load");
+        let tree = parser
+            .parse(source, None)
+            .expect("Terragrunt fixture should parse");
+        assert!(!tree.root_node().has_error());
+
+        let query = Query::new(&language, HIGHLIGHTS_QUERY)
+            .expect("Terragrunt highlights query should compile");
+        let capture_names = query.capture_names();
+        let mut cursor = QueryCursor::new();
+        let mut matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+        let mut captures = Vec::new();
+
+        while let Some(query_match) = matches.next() {
+            captures.extend(query_match.captures.iter().map(|capture| {
+                let range = capture.node.byte_range();
+                (
+                    source[range].to_string(),
+                    capture_names[capture.index as usize].to_string(),
+                )
+            }));
+        }
+
+        captures
     }
 }

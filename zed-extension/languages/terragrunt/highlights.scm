@@ -158,10 +158,136 @@
         (identifier) @type
         (#any-of? @type "bool" "string" "number" "object" "tuple" "list" "map" "set" "any"))))
 
-; Terragrunt traversal roots and members
+; Terragrunt traversal roots
 (expression
   (variable_expr
     (identifier) @type
-    (#any-of? @type "local" "dependency" "include" "inputs"))
+    (#any-of? @type "local" "dependency" "include" "inputs")))
+
+; First traversal member: dependency.ecs_cluster
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
   (get_attr
-    (identifier) @variable))
+    (identifier) @property))
+
+; Second traversal member: dependency.ecs_cluster.outputs
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @attribute))
+
+; Third traversal member: dependency.ecs_cluster.outputs.cluster_name
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @variable.special))
+
+; Fourth traversal member: repeat the member palette
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @property))
+
+; Fifth traversal member
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @attribute))
+
+; Sixth traversal member
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @variable.special))
+
+; Seventh traversal member
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @property))
+
+; Eighth traversal member
+(expression
+  (variable_expr
+    (identifier) @_terragrunt_root
+    (#any-of? @_terragrunt_root "local" "dependency" "include" "inputs"))
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr)
+  .
+  (get_attr
+    (identifier) @attribute))

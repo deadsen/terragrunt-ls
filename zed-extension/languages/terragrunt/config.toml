@@ -8,6 +8,7 @@ path_suffixes = [
 ]
 line_comments = ["# ", "// "]
 block_comment = ["/*", "*/"]
+word_characters = ["-"]
 autoclose_before = ",}])"
 brackets = [
   { start = "{", end = "}", close = true, newline = true },
