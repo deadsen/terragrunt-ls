@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/lsp"
@@ -25,6 +26,7 @@ import (
 
 type State struct {
 	// Map of file names to Terragrunt configs
+	mu      sync.RWMutex
 	Configs map[string]store.Store
 }
 
@@ -32,28 +34,68 @@ func NewState() State {
 	return State{Configs: map[string]store.Store{}}
 }
 
-func (s *State) OpenDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string) []protocol.Diagnostic {
+func (s *State) OpenDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
 	l.Debug(
 		"Opening document",
 		"uri", docURI,
 		"text", text,
 	)
 
-	return s.updateState(ctx, l, docURI, text)
+	return s.updateState(ctx, l, docURI, text, version)
 }
 
-func (s *State) UpdateDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string) []protocol.Diagnostic {
+func (s *State) UpdateDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
 	l.Debug(
 		"Updating document",
 		"uri", docURI,
 		"text", text,
 	)
 
-	return s.updateState(ctx, l, docURI, text)
+	return s.updateState(ctx, l, docURI, text, version)
 }
 
-func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string) []protocol.Diagnostic {
+func (s *State) SaveDocument(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI) []protocol.Diagnostic {
+	st, ok := s.Document(docURI)
+	if !ok {
+		return []protocol.Diagnostic{}
+	}
+
+	return s.updateState(ctx, l, docURI, st.Document, st.Version)
+}
+
+func (s *State) CloseDocument(docURI protocol.DocumentURI) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.Configs, docURI.Filename())
+}
+
+func (s *State) Document(docURI protocol.DocumentURI) (store.Store, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	st, ok := s.Configs[docURI.Filename()]
+	return st, ok
+}
+
+func (s *State) IsCurrent(docURI protocol.DocumentURI, version int32) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	st, ok := s.Configs[docURI.Filename()]
+	return ok && st.Version == version
+}
+
+func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protocol.DocumentURI, text string, version int32) []protocol.Diagnostic {
 	filename := docURI.Filename()
+
+	s.mu.RLock()
+	current, ok := s.Configs[filename]
+	s.mu.RUnlock()
+	if ok && version < current.Version {
+		return []protocol.Diagnostic{}
+	}
+
 	fileType := DetectFileType(filename)
 
 	// Ignore errors from AST indexing since we'll get the same errors from the Terragrunt parser just below
@@ -64,6 +106,7 @@ func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protoco
 		CfgAsCty: cty.NilVal,
 		Document: text,
 		FileType: fileType,
+		Version:  version,
 	}
 
 	var diags []protocol.Diagnostic
@@ -110,13 +153,21 @@ func (s *State) updateState(ctx context.Context, l logger.Logger, docURI protoco
 		diags = []protocol.Diagnostic{}
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current, ok = s.Configs[filename]
+	if ok && version < current.Version {
+		return []protocol.Diagnostic{}
+	}
+
 	s.Configs[filename] = st
 
 	return diags
 }
 
 func (s *State) Hover(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.HoverResponse {
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok {
 		return newEmptyHoverResponse(id)
 	}
@@ -198,7 +249,7 @@ func newEmptyHoverResponse(id int) lsp.HoverResponse {
 }
 
 func (s *State) Definition(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.DefinitionResponse {
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok {
 		return newEmptyDefinitionResponse(id, docURI, position)
 	}
@@ -394,7 +445,7 @@ func newEmptyDefinitionResponse(id int, docURI protocol.DocumentURI, position pr
 }
 
 func (s *State) TextDocumentCompletion(l logger.Logger, id int, docURI protocol.DocumentURI, position protocol.Position) lsp.CompletionResponse {
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok {
 		return lsp.CompletionResponse{
 			Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
@@ -416,7 +467,7 @@ func (s *State) TextDocumentCompletion(l logger.Logger, id int, docURI protocol.
 }
 
 func (s *State) TextDocumentFormatting(l logger.Logger, id int, docURI protocol.DocumentURI) lsp.FormatResponse {
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok {
 		return lsp.FormatResponse{
 			Response: lsp.Response{RPC: lsp.RPCVersion, ID: &id},
@@ -457,7 +508,7 @@ func (s *State) PrepareRename(l logger.Logger, id int, docURI protocol.DocumentU
 		Result:   nil,
 	}
 
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok || !canRename(st) {
 		return empty
 	}
@@ -482,7 +533,7 @@ func (s *State) TextDocumentRename(l logger.Logger, id int, docURI protocol.Docu
 		Result:   nil,
 	}
 
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok || !canRename(st) {
 		return empty
 	}
@@ -541,7 +592,7 @@ func (s *State) TextDocumentReferences(l logger.Logger, id int, docURI protocol.
 		Result:   nil,
 	}
 
-	st, ok := s.Configs[docURI.Filename()]
+	st, ok := s.Document(docURI)
 	if !ok || !canRename(st) {
 		return empty
 	}

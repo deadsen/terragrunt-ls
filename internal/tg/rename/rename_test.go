@@ -119,7 +119,7 @@ inputs = {
 			s := tg.NewState()
 
 			docURI := uri.File("/test/terragrunt.hcl")
-			s.OpenDocument(t.Context(), l, docURI, tt.document)
+			s.OpenDocument(t.Context(), l, docURI, tt.document, 1)
 
 			target := rename.GetRenameTarget(l, s.Configs[docURI.Filename()], tt.position)
 
@@ -155,7 +155,7 @@ dependency "b" {
 	l := testutils.NewTestLogger(t)
 	s := tg.NewState()
 	docURI := uri.File(hclPath)
-	s.OpenDocument(t.Context(), l, docURI, content)
+	s.OpenDocument(t.Context(), l, docURI, content, 1)
 
 	st := s.Configs[hclPath]
 
@@ -196,7 +196,7 @@ func TestFindAllOccurrences_NoDefinition(t *testing.T) {
 	l := testutils.NewTestLogger(t)
 	s := tg.NewState()
 	docURI := uri.File(hclPath)
-	s.OpenDocument(t.Context(), l, docURI, content)
+	s.OpenDocument(t.Context(), l, docURI, content, 1)
 
 	st := s.Configs[hclPath]
 

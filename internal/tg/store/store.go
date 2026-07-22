@@ -31,4 +31,5 @@ type Store struct {
 	CfgAsCty cty.Value
 	Document string
 	FileType FileType
+	Version  int32
 }

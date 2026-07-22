@@ -243,17 +243,13 @@ func hclDiagsToLSPDiags(hclDiags hcl.Diagnostics) []protocol.Diagnostic {
 
 // DetectFileType returns the FileType for the given filename based on its base name.
 func DetectFileType(filename string) store.FileType {
-	base := filepath.Base(filename)
-
-	switch base {
-	case "terragrunt.hcl":
-		return store.FileTypeUnit
+	switch filepath.Base(filename) {
 	case "terragrunt.stack.hcl":
 		return store.FileTypeStack
 	case "terragrunt.values.hcl":
 		return store.FileTypeValues
 	default:
-		return store.FileTypeUnknown
+		return store.FileTypeUnit
 	}
 }
 

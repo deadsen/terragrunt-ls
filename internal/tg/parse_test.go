@@ -38,9 +38,14 @@ func TestDetectFileType(t *testing.T) {
 			expected: store.FileTypeValues,
 		},
 		{
-			name:     "arbitrary hcl file",
-			filename: "/some/path/other.hcl",
-			expected: store.FileTypeUnknown,
+			name:     "root file",
+			filename: "/some/path/root.hcl",
+			expected: store.FileTypeUnit,
+		},
+		{
+			name:     "user-associated file",
+			filename: "/some/path/env.hcl",
+			expected: store.FileTypeUnit,
 		},
 	}
 

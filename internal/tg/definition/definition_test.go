@@ -56,7 +56,7 @@ func TestGetDefinitionTargetWithContext(t *testing.T) {
 
 			s := tg.NewState()
 
-			s.OpenDocument(context.Background(), l, "file:///test.hcl", tt.document)
+			s.OpenDocument(context.Background(), l, "file:///test.hcl", tt.document, 1)
 
 			target, context := definition.GetDefinitionTargetWithContext(l, s.Configs["/test.hcl"], tt.position)
 

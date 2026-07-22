@@ -34,7 +34,7 @@ inputs = {
 
 	l := testutils.NewTestLogger(t)
 	s := tg.NewState()
-	s.OpenDocument(t.Context(), l, uri.File(tgPath), content)
+	s.OpenDocument(t.Context(), l, uri.File(tgPath), content, 1)
 
 	t.Run("includes declaration when requested", func(t *testing.T) {
 		t.Parallel()

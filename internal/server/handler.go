@@ -39,7 +39,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			diagnostics := s.state.OpenDocument(ctx, s.log, params.TextDocument.URI, params.TextDocument.Text)
+			diagnostics := s.state.OpenDocument(ctx, s.log, params.TextDocument.URI, params.TextDocument.Text, params.TextDocument.Version)
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -54,7 +54,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 				return respond(nil, nil)
 			}
 			change := params.ContentChanges[len(params.ContentChanges)-1]
-			diagnostics := s.state.UpdateDocument(ctx, s.log, params.TextDocument.URI, change.Text)
+			diagnostics := s.state.UpdateDocument(ctx, s.log, params.TextDocument.URI, change.Text, params.TextDocument.Version)
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -65,63 +65,113 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(nil, nil)
+			diagnostics := s.state.SaveDocument(ctx, s.log, params.TextDocument.URI)
+			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
+				URI:         params.TextDocument.URI,
+				Diagnostics: diagnostics,
+			}))
 
 		case protocol.MethodTextDocumentDidClose:
 			var params protocol.DidCloseTextDocumentParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(nil, nil)
+			s.state.CloseDocument(params.TextDocument.URI)
+			err := s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
+				URI:         params.TextDocument.URI,
+				Diagnostics: []protocol.Diagnostic{},
+			})
+			return respond(nil, err)
 
 		case protocol.MethodTextDocumentHover:
 			var params protocol.HoverParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.Hover(s.log, 0, params.TextDocument.URI, params.Position).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.Hover(s.log, 0, params.TextDocument.URI, params.Position).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond(protocol.MarkupContent{}, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentDefinition:
 			var params protocol.DefinitionParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.Definition(s.log, 0, params.TextDocument.URI, params.Position).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.Definition(s.log, 0, params.TextDocument.URI, params.Position).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond(protocol.Location{
+					URI: params.TextDocument.URI,
+					Range: protocol.Range{
+						Start: params.Position,
+						End:   params.Position,
+					},
+				}, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentCompletion:
 			var params protocol.CompletionParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.TextDocumentCompletion(s.log, 0, params.TextDocument.URI, params.Position).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.TextDocumentCompletion(s.log, 0, params.TextDocument.URI, params.Position).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond([]protocol.CompletionItem{}, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentFormatting:
 			var params protocol.DocumentFormattingParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.TextDocumentFormatting(s.log, 0, params.TextDocument.URI).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.TextDocumentFormatting(s.log, 0, params.TextDocument.URI).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond([]protocol.TextEdit{}, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentReferences:
 			var params protocol.ReferenceParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.TextDocumentReferences(s.log, 0, params.TextDocument.URI, params.Position, params.Context.IncludeDeclaration).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.TextDocumentReferences(s.log, 0, params.TextDocument.URI, params.Position, params.Context.IncludeDeclaration).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond(nil, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentPrepareRename:
 			var params protocol.PrepareRenameParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.PrepareRename(s.log, 0, params.TextDocument.URI, params.Position).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.PrepareRename(s.log, 0, params.TextDocument.URI, params.Position).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond(nil, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodTextDocumentRename:
 			var params protocol.RenameParams
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
-			return respond(s.state.TextDocumentRename(s.log, 0, params.TextDocument.URI, params.Position, params.NewName).Result, nil)
+			st, ok := s.state.Document(params.TextDocument.URI)
+			result := s.state.TextDocumentRename(s.log, 0, params.TextDocument.URI, params.Position, params.NewName).Result
+			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
+				return respond(nil, nil)
+			}
+			return respond(result, nil)
 
 		case protocol.MethodShutdown:
 			s.shutdown.Store(true)
