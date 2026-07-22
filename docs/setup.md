@@ -1,105 +1,105 @@
 # Setup
 
-## Setting up build dependencies
+## Build dependencies
 
-To bootstrap your development environment, the most convenient method is to [install mise](https://mise.jdx.dev/installing-mise.html).
-
-After installing `mise`, you can run the following command to install all necessary build dependencies for this project:
+The repository's supported tool versions are declared in [`mise.toml`](../mise.toml). Install them with [mise](https://mise.jdx.dev/):
 
 ```bash
 mise install
 ```
 
-Alternatively, you can install the relevant dependencies manually by reading the [mise.toml](../mise.toml) file, and installing the dependencies listed there.
+You can also install the listed Go, Node.js, and Rust toolchains manually.
 
-## Building the Language Server
+## Build the language server
 
-To setup the language server in your editor, first install `terragrunt-ls` by running the following at the root of this repository:
+From the repository root, install the current source on your `PATH` or build a local binary:
 
 ```bash
-go install
+go install ./
+go build -o ./terragrunt-ls ./
 ```
 
-(In the future, this will be available as a precompiled binary for download)
+The editor integrations described here use local binaries. They do not download a language-server release at runtime.
 
-Then follow the instructions below for your editor:
+## Canonical filenames and additional files
+
+Both editor extensions recognize only these Terragrunt filenames by default:
+
+- `terragrunt.hcl`
+- `root.hcl`
+- `terragrunt.stack.hcl`
+- `terragrunt.values.hcl`
+
+An additional file opened with language ID `terragrunt` is treated as a unit file.
 
 ## Visual Studio Code
 
-To install the Visual Studio Code extension, you can manually compile the extension locally, then install it from the `.vsix` file.
+Install the locked dependencies, compile the client, and build the server where the packaged extension expects it:
 
-1. Navigate to the `vscode-extension` directory:
+```bash
+npm ci --prefix vscode-extension
+npm run compile --prefix vscode-extension
+go build -o ./vscode-extension/out/terragrunt-ls ./
+```
 
-   ```bash
-   cd vscode-extension
-   ```
+Open `vscode-extension` in VS Code and press F5 to use the Extension Development Host. Development mode runs the repository source with `go run`; packaged mode launches `vscode-extension/out/terragrunt-ls`.
 
-2. Ensure you have vsce (Visual Studio Code Extension CLI) & the typescript compiler installed. If you don't have it, you can install it globally using npm:
+Use VS Code's native file associations for additional filenames:
 
-   ```bash
-   npm install -g @vscode/vsce
-   npm install -g typescript
-   ```
-
-3. Install local javascript packages
-
-   ```bash
-   npm install
-   ```
-
-4. Run the following command to package the extension:
-
-   ```bash
-   vsce package
-   ```
-
-5. This will create a `.vsix` file in the `vscode-extension` directory (e.g. `terragrunt-ls-0.0.1.vsix`). You can install this file directly as a Visual Studio Code extension, like so:
-
-   ```bash
-    code --install-extension terragrunt-ls-0.0.1.vsix
-    ```
-
-Installation from the Visual Studio Extensions Marketplace coming soon!
-
-## Neovim
-
-For Neovim, you can install the neovim plugin by adding the following to your editor:
-
-```lua
--- ~/.config/nvim/lua/custom/plugins/terragrunt-ls.lua
-
-return {
-  {
-    "gruntwork-io/terragrunt-ls",
-    -- To use a local version of the Neovim plugin, you can use something like following:
-    -- dir = vim.fn.expand '~/repos/src/github.com/gruntwork-io/terragrunt-ls',
-    ft = 'hcl',
-    config = function()
-      local terragrunt_ls = require 'terragrunt-ls'
-      terragrunt_ls.setup {
-        cmd_env = {
-          -- If you want to see language server logs,
-          -- set this to the path you want.
-          -- TG_LS_LOG = vim.fn.expand '/tmp/terragrunt-ls.log',
-        },
-      }
-      if terragrunt_ls.client then
-        vim.api.nvim_create_autocmd('FileType', {
-          pattern = 'hcl',
-          callback = function()
-            vim.lsp.buf_attach_client(0, terragrunt_ls.client)
-          end,
-        })
-      end
-    end,
-  },
+```json
+{
+  "files.associations": {
+    "common.hcl": "terragrunt",
+    "*.terragrunt.hcl": "terragrunt"
+  }
 }
 ```
 
-Installation from Mason coming soon!
+To create a locally installable VSIX, install `@vscode/vsce`, run `npm run vscode:prepublish` in `vscode-extension`, then run `vsce package` there.
 
 ## Zed
 
-For now, clone this repo and point to the `zed-extension` directory when [installing dev extension](https://zed.dev/docs/extensions/developing-extensions#developing-an-extension-locally)
+Build or install the server and verify the extension crate:
 
-Installing from extension page coming soon!
+```bash
+go install ./
+cargo check --locked --manifest-path zed-extension/Cargo.toml
+```
+
+Install `zed-extension` as a [development extension](https://zed.dev/docs/extensions/developing-extensions#developing-an-extension-locally). The extension first checks its native binary configuration and otherwise searches the worktree `PATH` for `terragrunt-ls`:
+
+```json
+{
+  "lsp": {
+    "terragrunt": {
+      "binary": {
+        "path": "/absolute/path/to/terragrunt-ls"
+      }
+    }
+  }
+}
+```
+
+Zed's `file_types` setting replaces the extension defaults, so retain the four canonical filenames when adding a custom one:
+
+```json
+{
+  "file_types": {
+    "Terragrunt": [
+      "terragrunt.hcl",
+      "root.hcl",
+      "terragrunt.stack.hcl",
+      "terragrunt.values.hcl",
+      "common.hcl"
+    ]
+  }
+}
+```
+
+## Neovim
+
+The repository also contains a Neovim plugin. Install `terragrunt-ls` on `PATH`, add this repository as a plugin, and call `require('terragrunt-ls').setup()`. Editor feature parity in this change is scoped to Zed and Visual Studio Code.
+
+## Verification
+
+See the repeatable [cross-editor smoke test](./editor-smoke-test.md) after building both integrations from the same source checkout.

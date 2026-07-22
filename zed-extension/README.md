@@ -2,6 +2,8 @@
 
 [Zed extension](https://zed.dev/docs/extensions/installing-extensions) for [terragrunt-ls](https://github.com/gruntwork-io/terragrunt-ls), mostly based on [terraform extension](https://github.com/zed-extensions/terraform)
 
+It exposes the server's hover, definition, references, rename, completion, diagnostics, formatting, and dependency-output action features. See the repository's [capability reference](../docs/server-capabilities.md) for details.
+
 ## Configuration
 
 The extension recognizes Terragrunt's canonical filenames:
@@ -46,3 +48,5 @@ The extension uses `terragrunt-ls` from the worktree `PATH` by default. To use a
 ```
 
 A configured binary path takes precedence over `PATH`. The extension never downloads a language-server binary.
+
+For a repeatable local verification flow, use the [cross-editor smoke test](../docs/editor-smoke-test.md).
