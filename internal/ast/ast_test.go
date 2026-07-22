@@ -103,6 +103,19 @@ func TestParseHCLFile_WithErrors(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestParseHCLFileIndexesDependencies(t *testing.T) {
+	t.Parallel()
+
+	indexed, err := ast.ParseHCLFile("test.hcl", []byte(`dependency "app" {
+  config_path = "../app"
+}`))
+	require.NoError(t, err)
+
+	dependency, ok := indexed.Dependencies["app"]
+	require.True(t, ok)
+	assert.True(t, ast.IsDependencyBlock(dependency))
+}
+
 func TestIndexedAST_FindNodeAt_BasicCases(t *testing.T) {
 	t.Parallel()
 

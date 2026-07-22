@@ -45,6 +45,8 @@ type IndexedAST struct {
 	Locals Scope
 	// Includes contains the include blocks in the file, indexed by include block name
 	Includes Scope
+	// Dependencies contains the dependency blocks in the file, indexed by dependency block name
+	Dependencies Scope
 }
 
 // FindNodeAt returns the node at the given position in the file. If no node is found, returns nil.
@@ -111,17 +113,19 @@ func (s Scope) Add(node *IndexedNode) {
 type NodeIndex map[int][]*IndexedNode
 
 type nodeIndexBuilder struct {
-	index    NodeIndex
-	locals   Scope
-	includes Scope
-	stack    []*IndexedNode
+	index        NodeIndex
+	locals       Scope
+	includes     Scope
+	dependencies Scope
+	stack        []*IndexedNode
 }
 
 func newNodeIndexBuilder() *nodeIndexBuilder {
 	return &nodeIndexBuilder{
-		index:    make(map[int][]*IndexedNode),
-		locals:   make(Scope),
-		includes: make(Scope),
+		index:        make(map[int][]*IndexedNode),
+		locals:       make(Scope),
+		includes:     make(Scope),
+		dependencies: make(Scope),
 	}
 }
 
@@ -143,6 +147,8 @@ func (w *nodeIndexBuilder) Enter(node hclsyntax.Node) hcl.Diagnostics {
 		w.locals.Add(inode)
 	} else if IsIncludeBlock(inode) {
 		w.includes.Add(inode)
+	} else if IsDependencyBlock(inode) {
+		w.dependencies.Add(inode)
 	}
 
 	return nil
@@ -258,9 +264,10 @@ func indexAST(ast *hcl.File) *IndexedAST {
 	_ = hclsyntax.Walk(body, builder)
 
 	return &IndexedAST{
-		Index:    builder.index,
-		Locals:   builder.locals,
-		Includes: builder.includes,
-		HCLFile:  ast,
+		Index:        builder.index,
+		Locals:       builder.locals,
+		Includes:     builder.includes,
+		Dependencies: builder.dependencies,
+		HCLFile:      ast,
 	}
 }
