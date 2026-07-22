@@ -283,6 +283,33 @@ func TestState_OpenDocument(t *testing.T) {
 	}
 }
 
+func TestStateDiagnosticSnapshotIsMergedAndSorted(t *testing.T) {
+	t.Parallel()
+
+	source := `inputs = {
+  z = include.missing.inputs.z
+  a = local.missing
+}`
+	docURI := protocol.DocumentURI("file:///tmp/terragrunt.hcl")
+	l := testutils.NewTestLogger(t)
+	state := tg.NewState()
+
+	diags := state.OpenDocument(t.Context(), l, docURI, source, 1)
+
+	require.NotEmpty(t, diags)
+	stored, ok := state.Document(docURI)
+	require.True(t, ok)
+	assert.Equal(t, diags, stored.Diagnostics)
+	for i := 1; i < len(diags); i++ {
+		previous := diags[i-1]
+		current := diags[i]
+		assert.True(t,
+			previous.Range.Start.Line < current.Range.Start.Line ||
+				previous.Range.Start.Line == current.Range.Start.Line && previous.Range.Start.Character <= current.Range.Start.Character,
+		)
+	}
+}
+
 func TestState_UpdateDocument(t *testing.T) {
 	t.Parallel()
 

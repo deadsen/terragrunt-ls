@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 	"terragrunt-ls/internal/tg/store"
@@ -57,6 +58,27 @@ func TestDetectFileType(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestDiagnosticCircularLocalsRetainsParserCycle(t *testing.T) {
+	t.Parallel()
+
+	source := `locals {
+  a = local.b
+  b = local.a
+}`
+	filename := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	l := testutils.NewTestLogger(t)
+
+	_, diags := tg.ParseTerragruntBuffer(t.Context(), l, filename, source)
+
+	require.NotEmpty(t, diags)
+	messages := make([]string, 0, len(diags))
+	for _, diagnostic := range diags {
+		messages = append(messages, diagnostic.Message)
+	}
+	assert.Contains(t, strings.Join(messages, "\n"), "local reference")
+	assert.Contains(t, strings.Join(messages, "\n"), "not evaluated")
 }
 
 func TestParseStackBuffer(t *testing.T) {

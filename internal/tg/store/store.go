@@ -6,6 +6,7 @@ package store
 import (
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/zclconf/go-cty/cty"
+	"go.lsp.dev/protocol"
 
 	"terragrunt-ls/internal/ast"
 )
@@ -25,11 +26,12 @@ const (
 )
 
 type Store struct {
-	AST      *ast.IndexedAST
-	Cfg      *config.TerragruntConfig
-	StackCfg *config.StackConfig
-	CfgAsCty cty.Value
-	Document string
-	FileType FileType
-	Version  int32
+	AST         *ast.IndexedAST
+	Cfg         *config.TerragruntConfig
+	StackCfg    *config.StackConfig
+	CfgAsCty    cty.Value
+	Document    string
+	Diagnostics []protocol.Diagnostic
+	FileType    FileType
+	Version     int32
 }

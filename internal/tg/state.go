@@ -10,6 +10,7 @@ import (
 	"terragrunt-ls/internal/lsp"
 	"terragrunt-ls/internal/tg/completion"
 	"terragrunt-ls/internal/tg/definition"
+	"terragrunt-ls/internal/tg/diagnostics"
 	"terragrunt-ls/internal/tg/hover"
 	"terragrunt-ls/internal/tg/references"
 	"terragrunt-ls/internal/tg/rename"
@@ -191,6 +192,13 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 	case store.FileTypeUnknown:
 		diags = []protocol.Diagnostic{}
 	}
+
+	if fileType == store.FileTypeUnit {
+		diags = diagnostics.FilterParser(st, diags)
+		diags = append(diags, diagnostics.Validate(filename, text, st)...)
+		diagnostics.Sort(diags)
+	}
+	st.Diagnostics = append([]protocol.Diagnostic(nil), diags...)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

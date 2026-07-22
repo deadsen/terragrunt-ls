@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/tg/store"
 
@@ -64,7 +65,7 @@ func ParseTerragruntBuffer(ctx context.Context, l logger.Logger, filename, text 
 
 	filteredDiags := filterHCLDiags(l, *parseDiags, filename, text)
 
-	diags := hclDiagsToLSPDiags(filteredDiags)
+	diags := hclDiagsToLSPDiags(text, filteredDiags)
 
 	return cfg, diags
 }
@@ -211,23 +212,14 @@ func isUnresolvableAttributeDiag(diag *hcl.Diagnostic, text string) bool {
 	return false
 }
 
-func hclDiagsToLSPDiags(hclDiags hcl.Diagnostics) []protocol.Diagnostic {
+func hclDiagsToLSPDiags(source string, hclDiags hcl.Diagnostics) []protocol.Diagnostic {
 	diags := make([]protocol.Diagnostic, 0, len(hclDiags))
 
 	for _, diag := range hclDiags {
 		var diagRange protocol.Range
 
 		if diag.Subject != nil {
-			diagRange = protocol.Range{
-				Start: protocol.Position{
-					Line:      uint32(diag.Subject.Start.Line) - 1,
-					Character: uint32(diag.Subject.Start.Column) - 1,
-				},
-				End: protocol.Position{
-					Line:      uint32(diag.Subject.End.Line) - 1,
-					Character: uint32(diag.Subject.End.Column) - 1,
-				},
-			}
+			diagRange = ast.FromHCLRange(source, *diag.Subject)
 		}
 
 		diags = append(diags, protocol.Diagnostic{
@@ -266,7 +258,7 @@ func ParseStackBuffer(ctx context.Context, l logger.Logger, filename, text strin
 
 	filteredDiags := filterHCLDiags(l, *parseDiags, filename, text)
 
-	diags := hclDiagsToLSPDiags(filteredDiags)
+	diags := hclDiagsToLSPDiags(text, filteredDiags)
 
 	return cfg, diags
 }
