@@ -3,15 +3,19 @@ package completion
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/tg/store"
-	"terragrunt-ls/internal/tg/text"
 
+	"github.com/hashicorp/hcl/v2"
 	"go.lsp.dev/protocol"
 )
 
 func GetCompletions(l logger.Logger, s store.Store, position protocol.Position) []protocol.CompletionItem {
-	word := text.GetCursorWord(s.Document, position)
+	prefix, editRange := PrefixRange(s.Document, position)
 
 	var candidates []protocol.CompletionItem
 
@@ -29,12 +33,44 @@ func GetCompletions(l logger.Logger, s store.Store, position protocol.Position) 
 	completions := []protocol.CompletionItem{}
 
 	for _, completion := range candidates {
-		if strings.HasPrefix(completion.Label, word) {
+		if strings.HasPrefix(completion.Label, prefix) {
+			if completion.TextEdit != nil {
+				completion.TextEdit.Range = editRange
+			}
 			completions = append(completions, completion)
 		}
 	}
 
 	return completions
+}
+
+// PrefixRange returns the identifier prefix immediately before position and
+// the LSP range that should be replaced by a completion.
+func PrefixRange(document string, position protocol.Position) (string, protocol.Range) {
+	lines := strings.Split(document, "\n")
+	if int(position.Line) >= len(lines) {
+		return "", protocol.Range{Start: position, End: position}
+	}
+
+	line := lines[position.Line]
+	endPosition := ast.ToHCLPos(document, position)
+	end := min(max(endPosition.Column-1, 0), len(line))
+	start := end
+	for start > 0 {
+		r, size := utf8.DecodeLastRuneInString(line[:start])
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			break
+		}
+		start -= size
+	}
+
+	startPosition := ast.FromHCLPos(document, hcl.Pos{
+		Line:   int(position.Line) + 1,
+		Column: start + 1,
+		Byte:   endPosition.Byte - (end - start),
+	})
+
+	return line[start:end], protocol.Range{Start: startPosition, End: position}
 }
 
 // newUnitCompletions returns a list of completions for terragrunt.hcl files.

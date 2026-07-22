@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.lsp.dev/protocol"
 )
 
@@ -71,7 +72,7 @@ func TestGetCompletions(t *testing.T) {
 				Document: `dependency`,
 				FileType: store.FileTypeUnit,
 			},
-			position: protocol.Position{Line: 0, Character: 3},
+			position: protocol.Position{Line: 0, Character: 10},
 			completions: []protocol.CompletionItem{
 				{
 					Label: "dependency",
@@ -84,7 +85,7 @@ func TestGetCompletions(t *testing.T) {
 					TextEdit: &protocol.TextEdit{
 						Range: protocol.Range{
 							Start: protocol.Position{Line: 0, Character: 0},
-							End:   protocol.Position{Line: 0, Character: 3},
+							End:   protocol.Position{Line: 0, Character: 10},
 						},
 						NewText: `dependency "${1}" {
 	config_path = "${2}"
@@ -99,7 +100,7 @@ func TestGetCompletions(t *testing.T) {
 				Document: `in`,
 				FileType: store.FileTypeUnit,
 			},
-			position: protocol.Position{Line: 0, Character: 1},
+			position: protocol.Position{Line: 0, Character: 2},
 			completions: []protocol.CompletionItem{
 				{
 					Label: "include",
@@ -112,7 +113,7 @@ func TestGetCompletions(t *testing.T) {
 					TextEdit: &protocol.TextEdit{
 						Range: protocol.Range{
 							Start: protocol.Position{Line: 0, Character: 0},
-							End:   protocol.Position{Line: 0, Character: 1},
+							End:   protocol.Position{Line: 0, Character: 2},
 						},
 						NewText: `include "${1:root}" {
 	path = ${2:find_in_parent_folders("root.hcl")}
@@ -130,7 +131,7 @@ func TestGetCompletions(t *testing.T) {
 					TextEdit: &protocol.TextEdit{
 						Range: protocol.Range{
 							Start: protocol.Position{Line: 0, Character: 0},
-							End:   protocol.Position{Line: 0, Character: 1},
+							End:   protocol.Position{Line: 0, Character: 2},
 						},
 						NewText: `inputs = {
 	${1} = ${2}
@@ -145,7 +146,7 @@ func TestGetCompletions(t *testing.T) {
 				Document: `include`,
 				FileType: store.FileTypeUnit,
 			},
-			position: protocol.Position{Line: 0, Character: 3},
+			position: protocol.Position{Line: 0, Character: 7},
 			completions: []protocol.CompletionItem{
 				{
 					Label: "include",
@@ -158,7 +159,7 @@ func TestGetCompletions(t *testing.T) {
 					TextEdit: &protocol.TextEdit{
 						Range: protocol.Range{
 							Start: protocol.Position{Line: 0, Character: 0},
-							End:   protocol.Position{Line: 0, Character: 3},
+							End:   protocol.Position{Line: 0, Character: 7},
 						},
 						NewText: `include "${1:root}" {
 	path = ${2:find_in_parent_folders("root.hcl")}
@@ -308,5 +309,23 @@ EOF
 
 			assert.ElementsMatch(t, tt.completions, completions)
 		})
+	}
+}
+
+func TestCompletionReplacesOnlyTypedPrefix(t *testing.T) {
+	t.Parallel()
+
+	st := store.Store{Document: "  dep", FileType: store.FileTypeUnit}
+	items := completion.GetCompletions(
+		testutils.NewTestLogger(t),
+		st,
+		protocol.Position{Line: 0, Character: 5},
+	)
+
+	require.NotEmpty(t, items)
+	for _, item := range items {
+		require.NotNil(t, item.TextEdit)
+		assert.Equal(t, protocol.Position{Line: 0, Character: 2}, item.TextEdit.Range.Start)
+		assert.Equal(t, protocol.Position{Line: 0, Character: 5}, item.TextEdit.Range.End)
 	}
 }

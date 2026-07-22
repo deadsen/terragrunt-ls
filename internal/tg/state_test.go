@@ -439,6 +439,44 @@ func TestState_Hover(t *testing.T) {
 	}
 }
 
+func TestState_Hover_NestedLocal(t *testing.T) {
+	t.Parallel()
+
+	source := `locals {
+  service = { database = { port = 5432 } }
+}
+inputs = { port = local.service.database.port }`
+	l := testutils.NewTestLogger(t)
+	state := tg.NewState()
+	docURI := protocol.DocumentURI("file:///tmp/terragrunt.hcl")
+	require.Empty(t, state.OpenDocument(t.Context(), l, docURI, source, 1))
+
+	result := state.Hover(l, 1, docURI, protocol.Position{Line: 3, Character: 43})
+
+	assert.Contains(t, result.Result.Contents.Value, "port = 5432")
+}
+
+func TestState_Hover_MarkedValueIsHidden(t *testing.T) {
+	t.Parallel()
+
+	source := `locals {
+  secret = "not-for-hover"
+}
+inputs = { value = local.secret }`
+	l := testutils.NewTestLogger(t)
+	state := tg.NewState()
+	docURI := protocol.DocumentURI("file:///tmp/terragrunt.hcl")
+	require.Empty(t, state.OpenDocument(t.Context(), l, docURI, source, 1))
+
+	stored := state.Configs[docURI.Filename()]
+	stored.CfgAsCty = stored.CfgAsCty.Mark("sensitive")
+	state.Configs[docURI.Filename()] = stored
+
+	result := state.Hover(l, 1, docURI, protocol.Position{Line: 3, Character: 31})
+
+	assert.Empty(t, result.Result.Contents.Value)
+}
+
 func TestState_Definition(t *testing.T) {
 	t.Parallel()
 

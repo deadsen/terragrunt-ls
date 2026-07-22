@@ -232,55 +232,72 @@ func (s *State) Hover(l logger.Logger, id int, docURI protocol.DocumentURI, posi
 		"config", st.Cfg,
 	)
 
-	word, context := hover.GetHoverTargetWithContext(l, st, position)
+	path, _, found := hover.GetLocalPath(st, position)
 
 	l.Debug(
 		"Hovering with context",
-		"word", word,
-		"context", context,
+		"path", path,
 	)
 
-	if word == "" {
+	if !found || len(path) == 0 {
 		return newEmptyHoverResponse(id)
 	}
 
-	//nolint:gocritic
-	switch context {
-	case hover.HoverContextLocal:
-		if st.Cfg == nil {
-			return newEmptyHoverResponse(id)
-		}
+	if st.Cfg == nil {
+		return newEmptyHoverResponse(id)
+	}
+	if _, ok := st.Cfg.Locals[path[0]]; !ok {
+		return newEmptyHoverResponse(id)
+	}
+	if st.CfgAsCty == cty.NilVal || st.CfgAsCty.IsMarked() || !st.CfgAsCty.IsKnown() || st.CfgAsCty.IsNull() {
+		return newEmptyHoverResponse(id)
+	}
 
-		if _, ok := st.Cfg.Locals[word]; !ok {
-			return newEmptyHoverResponse(id)
-		}
+	locals, ok := localValue(st.CfgAsCty, []string{"locals"})
+	if !ok {
+		return newEmptyHoverResponse(id)
+	}
+	localVal, ok := localValue(locals, path)
+	if !ok {
+		return newEmptyHoverResponse(id)
+	}
 
-		if st.CfgAsCty.IsNull() {
-			return newEmptyHoverResponse(id)
-		}
+	name := path[len(path)-1]
+	f := hclwrite.NewEmptyFile()
+	rootBody := f.Body()
+	rootBody.SetAttributeValue(name, localVal)
 
-		locals := st.CfgAsCty.GetAttr("locals")
-		localVal := locals.GetAttr(word)
-
-		f := hclwrite.NewEmptyFile()
-		rootBody := f.Body()
-		rootBody.SetAttributeValue(word, localVal)
-
-		return lsp.HoverResponse{
-			Response: lsp.Response{
-				RPC: lsp.RPCVersion,
-				ID:  &id,
+	return lsp.HoverResponse{
+		Response: lsp.Response{
+			RPC: lsp.RPCVersion,
+			ID:  &id,
+		},
+		Result: lsp.HoverResult{
+			Contents: protocol.MarkupContent{
+				Kind:  protocol.Markdown,
+				Value: text.WrapAsHCLCodeFence(strings.TrimSpace(string(f.Bytes()))),
 			},
-			Result: lsp.HoverResult{
-				Contents: protocol.MarkupContent{
-					Kind:  protocol.Markdown,
-					Value: text.WrapAsHCLCodeFence(strings.TrimSpace(string(f.Bytes()))),
-				},
-			},
+		},
+	}
+}
+
+func localValue(value cty.Value, path []string) (cty.Value, bool) {
+	for _, name := range path {
+		if value == cty.NilVal || value.IsMarked() || !value.IsKnown() || value.IsNull() {
+			return cty.NilVal, false
+		}
+
+		switch {
+		case value.Type().HasAttribute(name):
+			value = value.GetAttr(name)
+		case value.Type().IsMapType() && value.HasIndex(cty.StringVal(name)).True():
+			value = value.Index(cty.StringVal(name))
+		default:
+			return cty.NilVal, false
 		}
 	}
 
-	return newEmptyHoverResponse(id)
+	return value, value != cty.NilVal && !value.IsMarked() && value.IsKnown() && !value.IsNull()
 }
 
 func newEmptyHoverResponse(id int) lsp.HoverResponse {
