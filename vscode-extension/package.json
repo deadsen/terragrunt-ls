@@ -1,16 +1,16 @@
 {
 	"name": "terragrunt-ls",
-	"displayName": "Terragrunt Language Server (Official)",
-	"description": "Official Terragrunt Language Server extension by Gruntwork",
-	"author": "Gruntwork",
+	"displayName": "deadsen Terragrunt",
+	"description": "Unofficial Terragrunt Language Server extension maintained by deadsen",
+	"author": "deadsen",
 	"license": "MPL-2.0",
 	"icon": "images/icon.png",
 	"version": "0.1.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/gruntwork-io/terragrunt-ls.git"
+		"url": "https://github.com/deadsen/terragrunt-ls.git"
 	},
-	"publisher": "Gruntwork",
+	"publisher": "deadsen",
 	"categories": [],
 	"keywords": [
 		"terragrunt opentofu terraform"
@@ -96,6 +96,7 @@
 		"@types/node": "^20",
 		"@types/vscode": "^1.75.1",
 		"@vscode/test-electron": "^2.3.9",
+		"@vscode/vsce": "3.9.2",
 		"eslint": "^9.13.0",
 		"mocha": "^11.7.6",
 		"nodemon": "^3.1.9",

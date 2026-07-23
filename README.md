@@ -1,6 +1,8 @@
 # Terragrunt Language Server
 
-This is a language server for [Terragrunt](https://terragrunt.gruntwork.io/), with native integrations for Zed and Visual Studio Code.
+This is an unofficial personal fork of
+[Gruntwork's Terragrunt Language Server](https://github.com/gruntwork-io/terragrunt-ls),
+with native integrations for Zed and Visual Studio Code.
 
 It's a work in progress, and we're looking to start coordination with the Terragrunt community to make this the best possible language server for Terragrunt.
 
@@ -17,6 +19,9 @@ The editor extensions activate by default only for `terragrunt.hcl`, `root.hcl`,
 For instructions on how to setup the Terragrunt Language Server in your editor, see the [setup documentation](./docs/setup.md).
 
 Both integrations run a local build of `terragrunt-ls`; neither downloads a language-server binary at runtime.
+
+Public server and editor packages from this fork are available through GitHub
+Releases. See the [distribution guide](./docs/distribution.md).
 
 ## Contributions
 

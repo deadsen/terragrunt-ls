@@ -10,6 +10,9 @@ mise install
 
 You can also install the listed Go, Node.js, and Rust toolchains manually.
 
+To install a packaged release of this fork instead of building from source,
+follow the [distribution guide](./distribution.md).
+
 ## Build the language server
 
 From the repository root, install the current source on your `PATH` or build a local binary:

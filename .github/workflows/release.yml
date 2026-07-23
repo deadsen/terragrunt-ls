@@ -65,11 +65,31 @@ jobs:
           name: ${{ matrix.vsce_target }}
           path: vscode-extension/*.vsix
 
-  publish-marketplace:
-    name: Publish to VS Code Marketplace
+  # publish-marketplace:
+  #   name: Publish to VS Code Marketplace
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+  #     - name: Set up mise
+  #       uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+  #       with:
+  #         version: 2025.6.8
+
+  #     - name: Download all VSIX artifacts
+  #       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+
+  #     - name: Publish to Marketplace
+  #       run: npx @vscode/vsce publish --packagePath $(find . -iname '*.vsix')
+  #       env:
+  #         VSCE_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+
+  build-zed:
+    name: Package Zed extension
     runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -79,10 +99,38 @@ jobs:
         with:
           version: 2025.6.8
 
-      - name: Download all VSIX artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Install Zed WebAssembly target
+        run: rustup target add wasm32-wasip1
 
-      - name: Publish to Marketplace
-        run: npx @vscode/vsce publish --packagePath $(find . -iname '*.vsix')
+      - name: Build Zed extension
+        run: cargo build --locked --release --target wasm32-wasip1 --manifest-path zed-extension/Cargo.toml
+
+      - name: Test Zed extension
+        run: cargo test --locked --manifest-path zed-extension/Cargo.toml
+
+      - name: Resolve package tag
+        id: package
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' zed-extension/extension.toml | head -1)"
+            tag="v${version}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Package Zed extension
+        run: make release-package-zed TAG="${{ steps.package.outputs.tag }}"
+
+      - name: Upload Zed extension to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release upload "$GITHUB_REF_NAME" dist/terragrunt-ls-zed-*.zip
         env:
-          VSCE_PAT: ${{ secrets.AZURE_DEVOPS_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Zed extension as artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: zed-extension
+          path: dist/terragrunt-ls-zed-*.zip

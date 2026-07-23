@@ -1,13 +1,14 @@
-id = "terragrunt-ls"
-name = "Terragrunt"
+id = "terragrunt-ls-deadsen"
+name = "deadsen Terragrunt"
 version = "0.1.0"
 schema_version = 1
 authors = [
+	"Arsen Yushchenko <goclever899@gmail.com>",
 	"Tomasz Warczykowski <tomasz.warczykowski@silksh.pl>",
 	"Terragrunt Language Server Contributors"
 ]
-description = "Terragrunt Language Server"
-repository = "https://github.com/gruntwork-io/terragrunt-ls/zed-extension"
+description = "Unofficial Terragrunt Language Server extension maintained by deadsen"
+repository = "https://github.com/deadsen/terragrunt-ls"
 
 [language_servers.terragrunt]
 name = "Terragrunt LSP"
