@@ -5,9 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dist="$(mktemp -d)"
 trap 'rm -rf "$dist"' EXIT
 
-DIST_DIR="$dist" "$SCRIPT_DIR/package-zed.sh" v0.1.0
+DIST_DIR="$dist" "$SCRIPT_DIR/package-zed.sh" v0.2.0
 
-archive="$dist/terragrunt-ls-zed-0.1.0.zip"
+archive="$dist/terragrunt-ls-zed-0.2.0.zip"
 [[ -f "$archive" ]]
 
 for required in \

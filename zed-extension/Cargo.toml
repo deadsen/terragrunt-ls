@@ -1,6 +1,6 @@
 [package]
 name = "terragrunt-ls"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -8,7 +8,9 @@ crate-type = ["cdylib"]
 path = "src/lib.rs"
 
 [dependencies]
+sha2 = "0.10.9"
 zed_extension_api = "0.2.0"
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 tree-sitter = "0.25.3"

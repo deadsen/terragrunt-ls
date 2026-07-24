@@ -97,6 +97,69 @@ func TestDiagnosticFilterParserRequiresDependencyTraversal(t *testing.T) {
 	assert.Equal(t, uint32(2), filtered[0].Range.Start.Line)
 }
 
+func TestDiagnosticFilterParserSkipsUnknownGenerateDependencyContents(t *testing.T) {
+	t.Parallel()
+
+	source := `dependency "zone" {
+  config_path = "../zone"
+}
+
+generate "extra" {
+  contents = <<EOF
+locals {}
+resource "aws_route53_record" "this" {
+  zone_id = "${dependency.zone.outputs.zone_id}"
+}
+EOF
+}`
+	indexed, err := ast.ParseHCLFile("terragrunt.hcl", []byte(source))
+	require.NoError(t, err)
+	st := store.Store{AST: indexed, Document: source}
+	message := `Unsuitable value type: Unsuitable value: value must be known`
+
+	filtered := diagnostics.FilterParser(st, []protocol.Diagnostic{{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 6, Character: 0},
+			End:   protocol.Position{Line: 8, Character: 13},
+		},
+		Severity: protocol.DiagnosticSeverityError,
+		Source:   "HCL",
+		Message:  message,
+	}})
+
+	assert.Empty(t, filtered)
+}
+
+func TestDiagnosticFilterParserRetainsUnknownValueOutsideGenerateContents(t *testing.T) {
+	t.Parallel()
+
+	source := `dependency "module" {
+  config_path = "../module"
+}
+
+generate "extra" {
+  path     = dependency.module.outputs.path
+  contents = "content"
+}`
+	indexed, err := ast.ParseHCLFile("terragrunt.hcl", []byte(source))
+	require.NoError(t, err)
+	st := store.Store{AST: indexed, Document: source}
+	message := `Unsuitable value type: Unsuitable value: value must be known`
+	input := []protocol.Diagnostic{{
+		Range: protocol.Range{
+			Start: protocol.Position{Line: 5, Character: 13},
+			End:   protocol.Position{Line: 5, Character: 43},
+		},
+		Severity: protocol.DiagnosticSeverityError,
+		Source:   "HCL",
+		Message:  message,
+	}}
+
+	filtered := diagnostics.FilterParser(st, input)
+
+	assert.Equal(t, input, filtered)
+}
+
 func diagnosticMessages(input []protocol.Diagnostic) []string {
 	result := make([]string, 0, len(input))
 	for _, diagnostic := range input {

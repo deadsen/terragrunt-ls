@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"terragrunt-ls/internal/logger"
 	"terragrunt-ls/internal/testutils"
 	"terragrunt-ls/internal/tg"
 	"terragrunt-ls/internal/tg/store"
@@ -14,6 +15,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type errorRecordingLogger struct {
+	logger.Logger
+	messages []string
+}
+
+func (l *errorRecordingLogger) Error(message string, args ...any) {
+	l.messages = append(l.messages, message)
+	l.Logger.Error(message, args...)
+}
 
 func TestDetectFileType(t *testing.T) {
 	t.Parallel()
@@ -79,6 +90,44 @@ func TestDiagnosticCircularLocalsRetainsParserCycle(t *testing.T) {
 	}
 	assert.Contains(t, strings.Join(messages, "\n"), "local reference")
 	assert.Contains(t, strings.Join(messages, "\n"), "not evaluated")
+}
+
+func TestParseTerragruntBufferSkipsUnknownGenerateDependencyContents(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	dependencyDir := filepath.Join(tmpDir, "zone")
+	require.NoError(t, os.MkdirAll(dependencyDir, 0755))
+	_, err := testutils.CreateFile(dependencyDir, "terragrunt.hcl", "")
+	require.NoError(t, err)
+
+	unitDir := filepath.Join(tmpDir, "app")
+	require.NoError(t, os.MkdirAll(unitDir, 0755))
+	filename := filepath.Join(unitDir, "terragrunt.hcl")
+	source := `dependency "zone" {
+  config_path = "../zone"
+}
+
+generate "extra" {
+  path      = "_extra.tf"
+  if_exists = "overwrite"
+  contents  = <<EOF
+locals {
+  target_zone_id = concat(aws_lb.this.*.zone_id, [""])[0]
+}
+
+resource "aws_route53_record" "this" {
+  zone_id = "${dependency.zone.outputs.zone_id}"
+}
+EOF
+}`
+	l := &errorRecordingLogger{Logger: testutils.NewTestLogger(t)}
+
+	cfg, diags := tg.ParseTerragruntBuffer(t.Context(), l, filename, source)
+
+	require.NotNil(t, cfg)
+	assert.Empty(t, diags)
+	assert.Empty(t, l.messages)
 }
 
 func TestParseStackBuffer(t *testing.T) {

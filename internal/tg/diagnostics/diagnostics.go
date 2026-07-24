@@ -17,6 +17,8 @@ import (
 
 const sourceName = "Terragrunt"
 
+const unknownValueDiagnostic = `Unsuitable value type: Unsuitable value: value must be known`
+
 // Validate returns semantic diagnostics for declarations and traversals.
 func Validate(filename, source string, st store.Store) []protocol.Diagnostic {
 	if st.AST == nil || st.AST.HCLFile == nil {
@@ -86,6 +88,11 @@ func FilterParser(st store.Store, input []protocol.Diagnostic) []protocol.Diagno
 	for _, diagnostic := range input {
 		if strings.Contains(diagnostic.Message, `There is no variable named "dependency".`) &&
 			isDependencyTraversal(st, diagnostic.Range.Start) {
+			continue
+		}
+
+		if diagnostic.Message == unknownValueDiagnostic &&
+			isGenerateContentsDependencyOutput(st, diagnostic.Range.Start) {
 			continue
 		}
 
@@ -188,6 +195,53 @@ func isDependencyTraversal(st store.Store, position protocol.Position) bool {
 	}
 
 	return false
+}
+
+func isGenerateContentsDependencyOutput(st store.Store, position protocol.Position) bool {
+	node := st.AST.FindNodeAt(ast.ToHCLPos(st.Document, position))
+
+	attributeNode := ast.FindFirstParentMatch(node, func(candidate *ast.IndexedNode) bool {
+		attribute, ok := candidate.Node.(*hclsyntax.Attribute)
+
+		return ok && attribute.Name == "contents"
+	})
+	if attributeNode == nil {
+		return false
+	}
+
+	generateBlock := ast.FindFirstParentMatch(attributeNode, func(candidate *ast.IndexedNode) bool {
+		block, ok := candidate.Node.(*hclsyntax.Block)
+
+		return ok && block.Type == "generate"
+	})
+	if generateBlock == nil {
+		return false
+	}
+
+	attribute := attributeNode.Node.(*hclsyntax.Attribute)
+	found := false
+	_ = hclsyntax.VisitAll(attribute.Expr, func(node hclsyntax.Node) hcl.Diagnostics {
+		expression, ok := node.(*hclsyntax.ScopeTraversalExpr)
+		if !ok || len(expression.Traversal) < 3 {
+			return nil
+		}
+
+		root, rootOK := expression.Traversal[0].(hcl.TraverseRoot)
+		dependency, dependencyOK := expression.Traversal[1].(hcl.TraverseAttr)
+
+		outputs, outputsOK := expression.Traversal[2].(hcl.TraverseAttr)
+		if rootOK && dependencyOK && outputsOK &&
+			root.Name == "dependency" &&
+			outputs.Name == "outputs" {
+			if _, exists := st.AST.Dependencies[dependency.Name]; exists {
+				found = true
+			}
+		}
+
+		return nil
+	})
+
+	return found
 }
 
 func sortDiagnostics(input []protocol.Diagnostic) {

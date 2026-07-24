@@ -156,7 +156,7 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 
 	switch fileType {
 	case store.FileTypeUnit:
-		cfg, unitDiags := ParseTerragruntBuffer(ctx, l, filename, text)
+		cfg, unitDiags := parseTerragruntBuffer(ctx, l, filename, text, indexedAST)
 
 		l.Debug(
 			"Config",
@@ -197,7 +197,6 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 	}
 
 	if fileType == store.FileTypeUnit {
-		diags = diagnostics.FilterParser(st, diags)
 		diags = append(diags, diagnostics.Validate(filename, text, st)...)
 		diagnostics.Sort(diags)
 	}

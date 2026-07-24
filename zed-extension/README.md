@@ -29,7 +29,17 @@ To recognize additional filenames, configure Zed's native `file_types` setting. 
 }
 ```
 
-The extension uses `terragrunt-ls` from the worktree `PATH` by default. To use a local build or fork, configure the native LSP binary setting:
+The extension resolves the language server in this order:
+
+1. the native LSP binary setting;
+2. `terragrunt-ls` on the worktree `PATH`;
+3. the latest non-prerelease binary from
+   [deadsen/terragrunt-ls releases](https://github.com/deadsen/terragrunt-ls/releases).
+
+Downloaded binaries are matched to the current operating system and
+architecture, verified against the release's `SHA256SUMS`, and cached in the
+extension work directory. To use a local build or fork instead, configure the
+native LSP binary setting:
 
 ```json
 {
@@ -47,6 +57,7 @@ The extension uses `terragrunt-ls` from the worktree `PATH` by default. To use a
 }
 ```
 
-A configured binary path takes precedence over `PATH`. The extension never downloads a language-server binary.
+A configured binary path takes precedence over both `PATH` and the managed
+download.
 
 For a repeatable local verification flow, use the [cross-editor smoke test](../docs/editor-smoke-test.md).

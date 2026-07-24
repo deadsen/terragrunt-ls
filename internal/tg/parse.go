@@ -8,6 +8,7 @@ import (
 
 	"terragrunt-ls/internal/ast"
 	"terragrunt-ls/internal/logger"
+	"terragrunt-ls/internal/tg/diagnostics"
 	"terragrunt-ls/internal/tg/store"
 
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -54,18 +55,38 @@ func newParsingContext(ctx context.Context, tgLogger tgLog.Logger, filename stri
 }
 
 func ParseTerragruntBuffer(ctx context.Context, l logger.Logger, filename, text string) (*config.TerragruntConfig, []protocol.Diagnostic) {
+	indexedAST, _ := ast.ParseHCLFile(filename, []byte(text))
+
+	return parseTerragruntBuffer(ctx, l, filename, text, indexedAST)
+}
+
+func parseTerragruntBuffer(
+	ctx context.Context,
+	l logger.Logger,
+	filename string,
+	text string,
+	indexedAST *ast.IndexedAST,
+) (*config.TerragruntConfig, []protocol.Diagnostic) {
 	tgLogger := newTGLogger(l)
 	ctx, pctx, parseDiags := newParsingContext(ctx, tgLogger, filename)
 
 	cfg, err := config.ParseConfigString(ctx, pctx, tgLogger, filename, text, nil)
-	if err != nil {
-		// Just log the error for now
-		l.Error("Error parsing Terragrunt config", "error", err)
-	}
 
 	filteredDiags := filterHCLDiags(l, *parseDiags, filename, text)
 
 	diags := hclDiagsToLSPDiags(text, filteredDiags)
+	diags = diagnostics.FilterParser(store.Store{
+		AST:      indexedAST,
+		Document: text,
+	}, diags)
+
+	if err != nil {
+		if len(*parseDiags) > 0 && len(diags) == 0 {
+			l.Debug("Terragrunt parser returned only filtered diagnostics", "error", err)
+		} else {
+			l.Error("Error parsing Terragrunt config", "error", err)
+		}
+	}
 
 	return cfg, diags
 }

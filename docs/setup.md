@@ -62,14 +62,19 @@ To create a locally installable VSIX, install `@vscode/vsce`, run `npm run vscod
 
 ## Zed
 
-Build or install the server and verify the extension crate:
+Verify the extension crate:
 
 ```bash
-go install ./
 cargo check --locked --manifest-path zed-extension/Cargo.toml
 ```
 
-Install `zed-extension` as a [development extension](https://zed.dev/docs/extensions/developing-extensions#developing-an-extension-locally). The extension first checks its native binary configuration and otherwise searches the worktree `PATH` for `terragrunt-ls`:
+Install `zed-extension` as a [development extension](https://zed.dev/docs/extensions/developing-extensions#developing-an-extension-locally).
+The extension uses a configured binary first, then searches the worktree
+`PATH`, and otherwise downloads the latest matching release binary. The
+download is verified with `SHA256SUMS` and cached in Zed's extension work
+directory.
+
+To force a local build or fork, configure its absolute path:
 
 ```json
 {

@@ -20,7 +20,10 @@ can activate for Terragrunt files.
 | macOS ARM64 | `terragrunt-ls_<version>_darwin_arm64.tar.gz` | `terragrunt-ls-<version>-darwin-arm64.vsix` |
 
 The Zed source archive is `terragrunt-ls-zed-<version>.zip` for every supported
-platform. Zed also needs the matching standalone server archive.
+platform. On first use, the extension downloads the matching standalone ZIP
+from the latest non-prerelease GitHub release, verifies it with that release's
+`SHA256SUMS`, and caches the extracted server in Zed's extension work
+directory.
 
 ## Verify a download
 
@@ -28,16 +31,18 @@ Download the selected artifact and
 `terragrunt-ls_<version>_SHA256SUMS` from the same release. On Linux:
 
 ```bash
-grep 'terragrunt-ls_0.1.0_linux_amd64.tar.gz' terragrunt-ls_0.1.0_SHA256SUMS | sha256sum -c -
+grep 'terragrunt-ls_<version>_linux_amd64.tar.gz' \
+  'terragrunt-ls_<version>_SHA256SUMS' | sha256sum -c -
 ```
 
 On macOS ARM64:
 
 ```bash
-grep 'terragrunt-ls_0.1.0_darwin_arm64.tar.gz' terragrunt-ls_0.1.0_SHA256SUMS | shasum -a 256 -c -
+grep 'terragrunt-ls_<version>_darwin_arm64.tar.gz' \
+  'terragrunt-ls_<version>_SHA256SUMS' | shasum -a 256 -c -
 ```
 
-Replace `0.1.0` and the filename with the release being installed.
+Replace `<version>` and the filename with the release being installed.
 
 ## Install the VS Code extension
 
@@ -50,7 +55,7 @@ code --uninstall-extension Gruntwork.terragrunt-ls
 Use **Extensions: Install from VSIX** and select the matching `.vsix`, or run:
 
 ```bash
-code --install-extension terragrunt-ls-0.1.0-linux-x64.vsix
+code --install-extension 'terragrunt-ls-<version>-linux-x64.vsix'
 ```
 
 VS Code disables auto-update by default for extensions installed from VSIX.
@@ -63,22 +68,26 @@ In the Extensions view, confirm that **Auto Update** is unchecked for
 2. Extract `terragrunt-ls-zed-<version>.zip`.
 3. In Zed's Extensions page, choose **Install Dev Extension** and select the
    extracted `zed-extension` directory.
-4. Extract the matching server archive and place `terragrunt-ls` on `PATH`, or
-   set `lsp.terragrunt.binary.path` to its absolute path as shown in
-   [setup.md](./setup.md#zed).
+4. Open a Terragrunt file. Zed downloads and caches the matching server binary
+   if no configured or `PATH` binary is available.
 
-Install the newer extension bundle and server archive manually when upgrading.
+Install a newer extension bundle manually when upgrading the extension. The
+extension checks for and caches the latest server release automatically.
+
+For offline use or a forked server, place `terragrunt-ls` on `PATH` or set
+`lsp.terragrunt.binary.path` to its absolute path as shown in
+[setup.md](./setup.md#zed).
 
 ## Build a Zed dev extension without publishing
 
 To build the Zed bundle locally:
 
 ```bash
-mise exec -- make release-package-zed TAG=v0.1.0
+mise exec -- make release-package-zed TAG='v<version>'
 ```
 
-This creates `dist/terragrunt-ls-zed-0.1.0.zip`. The tag must match the versions
-in the VS Code and Zed manifests.
+This creates `dist/terragrunt-ls-zed-<version>.zip`. The tag must match the
+versions in the VS Code and Zed manifests.
 
 You can also run the **Release** workflow manually from GitHub Actions. A manual
 run builds and tests the Zed WebAssembly module and stores the source bundle in
@@ -102,7 +111,8 @@ Publish a release:
    `zed-extension/extension.toml`, and `zed-extension/Cargo.toml`; refresh the
    Cargo lockfile.
 2. Run `mise exec -- make test`.
-3. Run `mise exec -- make release-package TAG=v0.1.0`, replacing the version.
+3. Run `mise exec -- make release-package TAG='v<version>'`, replacing the
+   placeholder with the version.
 4. Review, commit, and push the version change.
 5. On GitHub, draft a new release using the exact `vMAJOR.MINOR.PATCH` tag and
    target the release commit.

@@ -30,6 +30,6 @@ if release_assert_version "0.1.0" "Zed manifest" "0.1.1" >/dev/null 2>&1; then
   fail "accepted mismatched version"
 fi
 
-"$SCRIPT_DIR/validate-version.sh" v0.1.0 >/dev/null
+"$SCRIPT_DIR/validate-version.sh" v0.2.0 >/dev/null
 
 echo "release version tests passed"
