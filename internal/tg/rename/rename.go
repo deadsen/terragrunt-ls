@@ -73,6 +73,7 @@ func FindAllOccurrences(target RenameTarget, file string, st store.Store) []Occu
 
 	resolved := symbol.Target{Kind: target.Kind, Name: target.Name}
 	symbolOccurrences := symbol.Occurrences(st.AST, st.Document, resolved, true)
+
 	occurrences := make([]Occurrence, 0, len(symbolOccurrences))
 	for _, occurrence := range symbolOccurrences {
 		occurrences = append(occurrences, Occurrence{

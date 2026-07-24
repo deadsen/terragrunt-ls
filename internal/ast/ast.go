@@ -143,11 +143,12 @@ func (w *nodeIndexBuilder) Enter(node hclsyntax.Node) hcl.Diagnostics {
 	w.stack = append(w.stack, inode)
 	w.index[line] = append(w.index[line], inode)
 
-	if IsLocalAttribute(inode) {
+	switch {
+	case IsLocalAttribute(inode):
 		w.locals.Add(inode)
-	} else if IsIncludeBlock(inode) {
+	case IsIncludeBlock(inode):
 		w.includes.Add(inode)
-	} else if IsDependencyBlock(inode) {
+	case IsDependencyBlock(inode):
 		w.dependencies.Add(inode)
 	}
 
@@ -207,6 +208,7 @@ func GetNodeIncludeLabel(inode *IndexedNode) (string, bool) {
 	if attr == nil {
 		return "", false
 	}
+
 	if attr.Node.(*hclsyntax.Attribute).Name != "path" {
 		return "", false
 	}

@@ -11,6 +11,8 @@ import (
 	"go.lsp.dev/protocol"
 )
 
+const quotedLabelDelimiterBytes = 2
+
 // Kind identifies a Terragrunt symbol namespace.
 type Kind string
 
@@ -129,6 +131,7 @@ func traversalTarget(expr *hclsyntax.ScopeTraversalExpr, source string, position
 	}
 
 	root, rootOK := expr.Traversal[0].(hcl.TraverseRoot)
+
 	attribute, attributeOK := expr.Traversal[1].(hcl.TraverseAttr)
 	if !rootOK || !attributeOK {
 		return Target{}, false
@@ -140,6 +143,7 @@ func traversalTarget(expr *hclsyntax.ScopeTraversalExpr, source string, position
 	}
 
 	identifierRange := ast.TraverseAttrIdentRange(attribute)
+
 	firstTwoSteps := hcl.Range{
 		Filename: root.SrcRange.Filename,
 		Start:    root.SrcRange.Start,
@@ -154,7 +158,7 @@ func traversalTarget(expr *hclsyntax.ScopeTraversalExpr, source string, position
 
 func bareLabelRange(labelRange hcl.Range) hcl.Range {
 	result := labelRange
-	if result.End.Byte-result.Start.Byte >= 2 {
+	if result.End.Byte-result.Start.Byte >= quotedLabelDelimiterBytes {
 		result.Start.Byte++
 		result.Start.Column++
 		result.End.Byte--
@@ -190,6 +194,7 @@ func blockKind(node *ast.IndexedNode) (Kind, bool) {
 
 func declarationRange(indexed *ast.IndexedAST, target Target) *hcl.Range {
 	var scope ast.Scope
+
 	switch target.Kind {
 	case Local:
 		scope = indexed.Locals
@@ -216,6 +221,7 @@ func declarationRange(indexed *ast.IndexedAST, target Target) *hcl.Range {
 		}
 
 		result := typed.LabelRanges[0]
+
 		return &result
 	default:
 		return nil
@@ -226,9 +232,11 @@ func containsPosition(sourceRange protocol.Range, position protocol.Position) bo
 	if position.Line < sourceRange.Start.Line || position.Line > sourceRange.End.Line {
 		return false
 	}
+
 	if position.Line == sourceRange.Start.Line && position.Character < sourceRange.Start.Character {
 		return false
 	}
+
 	if position.Line == sourceRange.End.Line && position.Character >= sourceRange.End.Character {
 		return false
 	}

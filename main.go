@@ -14,6 +14,7 @@ func main() {
 	cfg := config.Load()
 
 	l := logger.NewLogger(cfg.LogFile, cfg.LogLevel)
+
 	defer func() {
 		if err := l.Close(); err != nil {
 			panic(err)
@@ -23,6 +24,7 @@ func main() {
 	l.Info("Initializing terragrunt-ls")
 
 	ctx := context.Background()
+
 	s := server.New(l, tg.NewState())
 	if err := server.Serve(ctx, rpc.NewStdio(os.Stdin, os.Stdout), s); err != nil {
 		l.Error("Language server stopped", "error", err)

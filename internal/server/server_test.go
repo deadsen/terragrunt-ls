@@ -38,7 +38,7 @@ func TestServeLifecycle(t *testing.T) {
 	_, err := conn.Call(t.Context(), protocol.MethodInitialize, protocol.InitializeParams{}, &initialized)
 	require.NoError(t, err)
 	assert.True(t, initialized.Capabilities.TextDocumentSync.OpenClose)
-	assert.Equal(t, protocol.TextDocumentSyncKindFull, initialized.Capabilities.TextDocumentSync.Change)
+	assert.InDelta(t, float64(protocol.TextDocumentSyncKindFull), float64(initialized.Capabilities.TextDocumentSync.Change), 0)
 	require.NotNil(t, initialized.Capabilities.TextDocumentSync.Save)
 
 	require.NoError(t, conn.Notify(t.Context(), protocol.MethodInitialized, protocol.InitializedParams{}))
@@ -264,16 +264,16 @@ func TestFeatureResponseShapes(t *testing.T) {
 
 	position := protocol.Position{Line: 3, Character: 27}
 	calls := []struct {
-		method string
 		params any
+		method string
 	}{
-		{protocol.MethodTextDocumentHover, protocol.HoverParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
-		{protocol.MethodTextDocumentDefinition, protocol.DefinitionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
-		{protocol.MethodTextDocumentReferences, protocol.ReferenceParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, Context: protocol.ReferenceContext{IncludeDeclaration: true}}},
-		{protocol.MethodTextDocumentPrepareRename, protocol.PrepareRenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
-		{protocol.MethodTextDocumentRename, protocol.RenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, NewName: "renamed"}},
-		{protocol.MethodTextDocumentCompletion, protocol.CompletionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: protocol.Position{Line: 4, Character: 0}}}},
-		{protocol.MethodTextDocumentFormatting, protocol.DocumentFormattingParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}}},
+		{method: protocol.MethodTextDocumentHover, params: protocol.HoverParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{method: protocol.MethodTextDocumentDefinition, params: protocol.DefinitionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{method: protocol.MethodTextDocumentReferences, params: protocol.ReferenceParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, Context: protocol.ReferenceContext{IncludeDeclaration: true}}},
+		{method: protocol.MethodTextDocumentPrepareRename, params: protocol.PrepareRenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}}},
+		{method: protocol.MethodTextDocumentRename, params: protocol.RenameParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: position}, NewName: "renamed"}},
+		{method: protocol.MethodTextDocumentCompletion, params: protocol.CompletionParams{TextDocumentPositionParams: protocol.TextDocumentPositionParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}, Position: protocol.Position{Line: 4, Character: 0}}}},
+		{method: protocol.MethodTextDocumentFormatting, params: protocol.DocumentFormattingParams{TextDocument: protocol.TextDocumentIdentifier{URI: docURI}}},
 	}
 	for _, call := range calls {
 		var raw json.RawMessage
@@ -341,9 +341,9 @@ func requireNoDiagnostics(t *testing.T, diagnostics <-chan protocol.PublishDiagn
 
 type blockingServerLogger struct {
 	logger.Logger
-	message string
 	reached chan struct{}
 	release chan struct{}
+	message string
 	once    sync.Once
 }
 

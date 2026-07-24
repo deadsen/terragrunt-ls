@@ -83,22 +83,26 @@ func Resolve(st store.Store, docURI protocol.DocumentURI, position protocol.Posi
 					return []protocol.Location{{URI: docURI, Range: occurrence.Range}}
 				}
 			}
+
 			return nil
 		case symbol.Dependency:
 			configPath, err := terragruntpath.DependencyConfig(st, target.Name)
 			if err != nil {
 				return nil
 			}
+
 			targetFile, err := terragruntpath.DependencyTarget(docURI.Filename(), configPath)
 			if err != nil {
 				return nil
 			}
+
 			return fileLocation(targetFile)
 		case symbol.Include:
 			targetFile, err := terragruntpath.Include(st, target.Name)
 			if err != nil {
 				return nil
 			}
+
 			return fileLocation(targetFile)
 		}
 	}
@@ -107,6 +111,7 @@ func Resolve(st store.Store, docURI protocol.DocumentURI, position protocol.Posi
 	if node == nil {
 		return nil
 	}
+
 	if dependency, ok := ast.GetNodeDependencyLabel(node); ok {
 		configPath, err := terragruntpath.DependencyConfig(st, dependency)
 		if err == nil {
@@ -115,11 +120,13 @@ func Resolve(st store.Store, docURI protocol.DocumentURI, position protocol.Posi
 			}
 		}
 	}
+
 	if include, ok := ast.GetNodeIncludeLabel(node); ok {
 		if targetFile, err := terragruntpath.Include(st, include); err == nil {
 			return fileLocation(targetFile)
 		}
 	}
+
 	if targetFile, err := terragruntpath.FileCall(st, node); err == nil {
 		return fileLocation(targetFile)
 	}

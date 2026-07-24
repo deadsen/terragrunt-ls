@@ -53,7 +53,7 @@ linters:
     - unparam
     - usetesting
     - wastedassign
-    - wsl
+    - wsl_v5
     - zerologlint
   disable:
     - depguard
@@ -102,9 +102,17 @@ linters:
         - -ST1001
     unparam:
       check-exported: false
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
   exclusions:
     generated: lax
     rules:
+      # Server tests intentionally cover unexported protocol and lifecycle internals.
+      - linters:
+          - testpackage
+        path: internal/server/.*_test\.go
       - linters:
           - dupl
           - errcheck
@@ -112,7 +120,7 @@ linters:
           - lll
           - mnd
           - unparam
-          - wsl
+          - wsl_v5
         path: _test\.go
     paths:
       - docs

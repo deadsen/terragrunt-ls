@@ -15,9 +15,9 @@ func TestGetCompletions(t *testing.T) {
 	t.Parallel()
 
 	tc := []struct {
-		store       store.Store
 		name        string
 		completions []protocol.CompletionItem
+		store       store.Store
 		position    protocol.Position
 	}{
 		{

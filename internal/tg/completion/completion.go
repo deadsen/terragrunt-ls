@@ -37,6 +37,7 @@ func GetCompletions(l logger.Logger, s store.Store, position protocol.Position) 
 			if completion.TextEdit != nil {
 				completion.TextEdit.Range = editRange
 			}
+
 			completions = append(completions, completion)
 		}
 	}
@@ -55,12 +56,14 @@ func PrefixRange(document string, position protocol.Position) (string, protocol.
 	line := lines[position.Line]
 	endPosition := ast.ToHCLPos(document, position)
 	end := min(max(endPosition.Column-1, 0), len(line))
+
 	start := end
 	for start > 0 {
 		r, size := utf8.DecodeLastRuneInString(line[:start])
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
 			break
 		}
+
 		start -= size
 	}
 

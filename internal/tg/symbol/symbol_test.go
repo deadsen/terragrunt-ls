@@ -33,21 +33,23 @@ inputs = {
 
 	tests := []struct {
 		name        string
-		position    protocol.Position
 		kind        symbol.Kind
 		symbolName  string
+		position    protocol.Position
 		declaration bool
 	}{
-		{"local declaration", protocol.Position{Line: 1, Character: 3}, symbol.Local, "region", true},
-		{"dependency declaration", protocol.Position{Line: 3, Character: 13}, symbol.Dependency, "app", true},
-		{"include declaration", protocol.Position{Line: 6, Character: 10}, symbol.Include, "root", true},
-		{"local reference", protocol.Position{Line: 10, Character: 19}, symbol.Local, "region", false},
-		{"dependency reference", protocol.Position{Line: 11, Character: 20}, symbol.Dependency, "app", false},
-		{"include reference", protocol.Position{Line: 12, Character: 20}, symbol.Include, "root", false},
+		{name: "local declaration", kind: symbol.Local, symbolName: "region", position: protocol.Position{Line: 1, Character: 3}, declaration: true},
+		{name: "dependency declaration", kind: symbol.Dependency, symbolName: "app", position: protocol.Position{Line: 3, Character: 13}, declaration: true},
+		{name: "include declaration", kind: symbol.Include, symbolName: "root", position: protocol.Position{Line: 6, Character: 10}, declaration: true},
+		{name: "local reference", kind: symbol.Local, symbolName: "region", position: protocol.Position{Line: 10, Character: 19}},
+		{name: "dependency reference", kind: symbol.Dependency, symbolName: "app", position: protocol.Position{Line: 11, Character: 20}},
+		{name: "include reference", kind: symbol.Include, symbolName: "root", position: protocol.Position{Line: 12, Character: 20}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			target, ok := symbol.At(indexed, source, tt.position)
 			require.True(t, ok)
 			assert.Equal(t, tt.kind, target.Kind)

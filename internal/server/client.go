@@ -19,6 +19,7 @@ func (c Client) ShowMessage(ctx context.Context, params protocol.ShowMessagePara
 
 func (c Client) ShowDocument(ctx context.Context, params protocol.ShowDocumentParams) (*protocol.ShowDocumentResult, error) {
 	var result protocol.ShowDocumentResult
+
 	_, err := c.conn.Call(ctx, protocol.MethodShowDocument, &params, &result)
 
 	return &result, err

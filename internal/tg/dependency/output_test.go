@@ -2,7 +2,6 @@ package dependency_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,11 +81,11 @@ func TestRunnerResolveCancellationAndTimeout(t *testing.T) {
 	cancel()
 	_, err := dependency.NewRunner(time.Second).Resolve(ctx, sourcePath, "app", st)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled))
+	require.ErrorIs(t, err, context.Canceled)
 
 	_, err = dependency.NewRunner(10*time.Millisecond).Resolve(t.Context(), sourcePath, "app", st)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, context.DeadlineExceeded))
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func buildFakeTerragrunt(t *testing.T) string {
@@ -97,7 +96,7 @@ func buildFakeTerragrunt(t *testing.T) string {
 		binaryName += ".exe"
 	}
 	binaryPath := filepath.Join(binaryDir, binaryName)
-	cmd := exec.Command("go", "build", "-o", binaryPath, "./testdata/fake-terragrunt")
+	cmd := exec.CommandContext(t.Context(), "go", "build", "-o", binaryPath, "./testdata/fake-terragrunt")
 	cmd.Dir = "."
 	combined, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(combined))

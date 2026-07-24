@@ -24,10 +24,9 @@ import (
 )
 
 type State struct {
-	// Map of file names to Terragrunt configs
-	mu          sync.RWMutex
 	Configs     map[string]store.Store
 	generations map[string]uint64
+	mu          sync.RWMutex
 }
 
 func NewState() *State {
@@ -83,6 +82,7 @@ func (s *State) SaveDocumentWithStatus(ctx context.Context, l logger.Logger, doc
 	st, ok := s.Configs[filename]
 	generation := s.generations[filename]
 	s.mu.RUnlock()
+
 	if !ok {
 		return []protocol.Diagnostic{}, false
 	}
@@ -103,6 +103,7 @@ func (s *State) Document(docURI protocol.DocumentURI) (store.Store, bool) {
 	defer s.mu.RUnlock()
 
 	st, ok := s.Configs[docURI.Filename()]
+
 	return st, ok
 }
 
@@ -111,6 +112,7 @@ func (s *State) IsCurrent(docURI protocol.DocumentURI, version int32) bool {
 	defer s.mu.RUnlock()
 
 	st, ok := s.Configs[docURI.Filename()]
+
 	return ok && st.Version == version
 }
 
@@ -128,9 +130,11 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 	currentGeneration := s.generations[filename]
 	current, ok := s.Configs[filename]
 	s.mu.RUnlock()
+
 	if generation != currentGeneration {
 		return []protocol.Diagnostic{}, false
 	}
+
 	if ok && version < current.Version {
 		return []protocol.Diagnostic{}, false
 	}
@@ -197,6 +201,7 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 		diags = append(diags, diagnostics.Validate(filename, text, st)...)
 		diagnostics.Sort(diags)
 	}
+
 	st.Diagnostics = append([]protocol.Diagnostic(nil), diags...)
 
 	s.mu.Lock()
@@ -225,12 +230,15 @@ func (s *State) Hover(l logger.Logger, docURI protocol.DocumentURI, position pro
 	l.Debug("Hovering over character", "uri", docURI, "position", position)
 	path, _, found := hover.GetLocalPath(st, position)
 	l.Debug("Hovering with context", "path", path)
+
 	if !found || len(path) == 0 || st.Cfg == nil {
 		return nil
 	}
+
 	if _, ok := st.Cfg.Locals[path[0]]; !ok {
 		return nil
 	}
+
 	if st.CfgAsCty == cty.NilVal || st.CfgAsCty.IsMarked() || !st.CfgAsCty.IsKnown() || st.CfgAsCty.IsNull() {
 		return nil
 	}
@@ -239,6 +247,7 @@ func (s *State) Hover(l logger.Logger, docURI protocol.DocumentURI, position pro
 	if !ok {
 		return nil
 	}
+
 	localVal, ok := localValue(locals, path)
 	if !ok {
 		return nil
@@ -247,6 +256,7 @@ func (s *State) Hover(l logger.Logger, docURI protocol.DocumentURI, position pro
 	name := path[len(path)-1]
 	file := hclwrite.NewEmptyFile()
 	file.Body().SetAttributeValue(name, localVal)
+
 	return &protocol.Hover{
 		Contents: protocol.MarkupContent{
 			Kind:  protocol.Markdown,
@@ -260,6 +270,7 @@ func localValue(value cty.Value, path []string) (cty.Value, bool) {
 		if value == cty.NilVal || value.IsMarked() || !value.IsKnown() || value.IsNull() {
 			return cty.NilVal, false
 		}
+
 		switch {
 		case value.Type().HasAttribute(name):
 			value = value.GetAttr(name)
@@ -269,6 +280,7 @@ func localValue(value cty.Value, path []string) (cty.Value, bool) {
 			return cty.NilVal, false
 		}
 	}
+
 	return value, value != cty.NilVal && !value.IsMarked() && value.IsKnown() && !value.IsNull()
 }
 
@@ -277,10 +289,12 @@ func (s *State) Definition(docURI protocol.DocumentURI, position protocol.Positi
 	if !ok {
 		return []protocol.Location{}
 	}
+
 	locations := definition.Resolve(st, docURI, position)
 	if locations == nil {
 		return []protocol.Location{}
 	}
+
 	return locations
 }
 
@@ -289,6 +303,7 @@ func (s *State) TextDocumentCompletion(l logger.Logger, docURI protocol.Document
 	if !ok {
 		return []protocol.CompletionItem{}
 	}
+
 	return completion.GetCompletions(l, st, position)
 }
 
@@ -297,7 +312,9 @@ func (s *State) TextDocumentFormatting(l logger.Logger, docURI protocol.Document
 	if !ok {
 		return []protocol.TextEdit{}
 	}
+
 	l.Debug("Formatting requested", "uri", docURI)
+
 	return []protocol.TextEdit{{
 		Range: protocol.Range{
 			Start: protocol.Position{},
@@ -312,10 +329,12 @@ func (s *State) PrepareRename(l logger.Logger, docURI protocol.DocumentURI, posi
 	if !ok || !canRename(st) {
 		return protocol.Range{}, "", false
 	}
+
 	target := rename.GetRenameTarget(l, st, position)
 	if target.Kind == "" {
 		return protocol.Range{}, "", false
 	}
+
 	return target.IdentRange, target.Name, true
 }
 
@@ -324,22 +343,27 @@ func (s *State) TextDocumentRename(l logger.Logger, docURI protocol.DocumentURI,
 	if !ok || !canRename(st) || !rename.IsValidIdentifier(newName) {
 		return nil
 	}
+
 	target := rename.GetRenameTarget(l, st, position)
 	if target.Kind == "" {
 		return nil
 	}
+
 	occurrences := rename.FindAllOccurrences(target, docURI.Filename(), st)
 	if len(occurrences) == 0 {
 		return nil
 	}
+
 	edits := make([]protocol.TextEdit, 0, len(occurrences))
 	for _, occurrence := range occurrences {
 		newText := newName
 		if occurrence.IsDefinition && (target.Kind == symbol.Dependency || target.Kind == symbol.Include) {
 			newText = strconv.Quote(newName)
 		}
+
 		edits = append(edits, protocol.TextEdit{Range: occurrence.Range, NewText: newText})
 	}
+
 	return &protocol.WorkspaceEdit{Changes: map[protocol.DocumentURI][]protocol.TextEdit{docURI: edits}}
 }
 
@@ -347,6 +371,7 @@ func canRename(st store.Store) bool {
 	if st.AST == nil {
 		return false
 	}
+
 	return st.FileType == store.FileTypeUnit || st.FileType == store.FileTypeUnknown
 }
 
@@ -355,10 +380,12 @@ func (s *State) TextDocumentReferences(l logger.Logger, docURI protocol.Document
 	if !ok || !canRename(st) {
 		return []protocol.Location{}
 	}
+
 	locations := references.GetReferences(l, st, position, docURI.Filename(), includeDeclaration)
 	if locations == nil {
 		return []protocol.Location{}
 	}
+
 	return locations
 }
 

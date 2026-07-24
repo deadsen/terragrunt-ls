@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -58,6 +57,8 @@ inputs = { id = dependency.app.outputs.id }`
 }
 
 func TestExecuteDependencyOutputsWritesSecureFileAndShowsDocument(t *testing.T) {
+	t.Parallel()
+
 	server, docURI := dependencyOutputServer(t)
 	shown := make(chan protocol.ShowDocumentParams, 1)
 	bindTestClient(t, server, func(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
@@ -94,6 +95,8 @@ func TestExecuteDependencyOutputsWritesSecureFileAndShowsDocument(t *testing.T) 
 }
 
 func TestExecuteDependencyOutputsFallsBackToShowMessage(t *testing.T) {
+	t.Parallel()
+
 	server, docURI := dependencyOutputServer(t)
 	messages := make(chan protocol.ShowMessageParams, 1)
 	bindTestClient(t, server, func(ctx context.Context, reply jsonrpc2.Replier, req jsonrpc2.Request) error {
@@ -166,6 +169,7 @@ func bindTestClient(t *testing.T, server *Server, handler jsonrpc2.Handler) {
 	server.Bind(serverConn)
 }
 
+//nolint:paralleltest // This helper process relies on process-wide state and terminates with os.Exit.
 func TestDependencyOutputHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_DEPENDENCY_OUTPUT_HELPER") != "1" {
 		return
@@ -174,7 +178,7 @@ func TestDependencyOutputHelperProcess(t *testing.T) {
 	if !strings.Contains(arguments, "output -json --config") {
 		os.Exit(2)
 	}
-	encoded, _ := json.Marshal(map[string]any{"id": map[string]any{"value": "123"}})
+	encoded := []byte(`{"id":{"value":"123"}}`)
 	_, _ = os.Stdout.Write(encoded)
 	os.Exit(0)
 }

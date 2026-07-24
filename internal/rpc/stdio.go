@@ -1,3 +1,4 @@
+// Package rpc provides JSON-RPC transports for the language server.
 package rpc
 
 import "io"

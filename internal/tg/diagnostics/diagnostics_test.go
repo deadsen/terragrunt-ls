@@ -33,6 +33,8 @@ func TestDiagnosticValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			filename := filepath.Join(t.TempDir(), "terragrunt.hcl")
 			indexed, _ := ast.ParseHCLFile(filename, []byte(tt.source))
 			st := store.Store{AST: indexed, Document: tt.source, CfgAsCty: cty.NilVal}
@@ -43,7 +45,7 @@ func TestDiagnosticValidation(t *testing.T) {
 			assert.Contains(t, diagnosticMessages(result), tt.want)
 			for _, diagnostic := range result {
 				assert.Equal(t, "Terragrunt", diagnostic.Source)
-				assert.Equal(t, protocol.DiagnosticSeverityError, diagnostic.Severity)
+				assert.InDelta(t, float64(protocol.DiagnosticSeverityError), float64(diagnostic.Severity), 0)
 			}
 		})
 	}

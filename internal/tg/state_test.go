@@ -133,9 +133,9 @@ func TestStateConcurrentDocumentAccess(t *testing.T) {
 
 type blockingDebugLogger struct {
 	logger.Logger
-	message string
 	reached chan struct{}
 	release chan struct{}
+	message string
 	once    sync.Once
 }
 
@@ -394,8 +394,8 @@ func TestState_Hover(t *testing.T) {
 	tests := []struct {
 		name     string
 		document string
-		position protocol.Position
 		expected string
+		position protocol.Position
 	}{
 		{
 			name: "simple locals",
@@ -494,8 +494,8 @@ func TestState_Definition(t *testing.T) {
 	tests := []struct {
 		name     string
 		document string
-		position protocol.Position
 		expected []protocol.Location
+		position protocol.Position
 	}{
 		{
 			name: "nothing to jump to",

@@ -1,7 +1,6 @@
 package path_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,6 +61,6 @@ func TestDependencyTargetReturnsTypedErrorForMissingTarget(t *testing.T) {
 	require.Error(t, err)
 
 	var resolutionError *path.ResolutionError
-	assert.ErrorAs(t, err, &resolutionError)
-	assert.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorAs(t, err, &resolutionError)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }

@@ -1,3 +1,4 @@
+// Package server implements the Terragrunt language server protocol handlers.
 package server
 
 import (
@@ -16,16 +17,18 @@ import (
 	"go.lsp.dev/protocol"
 )
 
+const defaultDependencyTimeout = time.Minute
+
 type Server struct {
 	log              logger.Logger
-	state            *tg.State
 	client           Client
 	conn             jsonrpc2.Conn
-	shutdown         atomic.Bool
+	state            *tg.State
 	exited           chan struct{}
+	tempFiles        map[string]struct{}
 	dependencyRunner dependency.Runner
 	tempMu           sync.Mutex
-	tempFiles        map[string]struct{}
+	shutdown         atomic.Bool
 }
 
 func New(log logger.Logger, state *tg.State) *Server {
@@ -33,7 +36,7 @@ func New(log logger.Logger, state *tg.State) *Server {
 		log:              log,
 		state:            state,
 		exited:           make(chan struct{}),
-		dependencyRunner: dependency.NewRunner(60 * time.Second),
+		dependencyRunner: dependency.NewRunner(defaultDependencyTimeout),
 		tempFiles:        make(map[string]struct{}),
 	}
 }
@@ -78,7 +81,9 @@ func Serve(ctx context.Context, rwc io.ReadWriteCloser, s *Server) error {
 		_ = conn.Close()
 	case <-conn.Done():
 	}
+
 	<-conn.Done()
+
 	if err := conn.Err(); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) && !errors.Is(err, net.ErrClosed) {
 		return err
 	}

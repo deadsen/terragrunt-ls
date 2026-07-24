@@ -9,6 +9,8 @@ import (
 	"go.lsp.dev/protocol"
 )
 
+const maxBasicMultilingualPlaneCodePoint = '\uffff'
+
 // FromHCLRange converts a hcl.Range to a LSP protocol.Range.
 func FromHCLRange(source string, s hcl.Range) protocol.Range {
 	return protocol.Range{
@@ -21,6 +23,7 @@ func FromHCLRange(source string, s hcl.Range) protocol.Range {
 func FromHCLPos(source string, s hcl.Pos) protocol.Position {
 	line, _ := sourceLine(source, s.Line)
 	byteColumn := max(s.Column-1, 0)
+
 	byteColumn = min(byteColumn, len(line))
 	for byteColumn > 0 && !utf8.ValidString(line[:byteColumn]) {
 		byteColumn--
@@ -56,6 +59,7 @@ func ToHCLPos(source string, s protocol.Position) hcl.Pos {
 
 func sourceLine(source string, lineNumber int) (string, int) {
 	lines := strings.Split(source, "\n")
+
 	if lineNumber < 1 {
 		lineNumber = 1
 	}
@@ -78,9 +82,10 @@ func byteOffsetForUTF16Column(line string, column int) int {
 	}
 
 	units := 0
+
 	for byteOffset, r := range line {
 		runeUnits := 1
-		if r > 0xffff {
+		if r > maxBasicMultilingualPlaneCodePoint {
 			runeUnits = 2
 		}
 

@@ -185,8 +185,8 @@ inputs = {
 }`
 	tests := []struct {
 		name          string
-		position      protocol.Position
 		newName       string
+		position      protocol.Position
 		prepareStart  protocol.Position
 		prepareEnd    protocol.Position
 		declarationAt protocol.Position
@@ -214,6 +214,8 @@ inputs = {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			tmpDir := t.TempDir()
 			tgPath := filepath.Join(tmpDir, "terragrunt.hcl")
 			docURI := uri.File(tgPath)

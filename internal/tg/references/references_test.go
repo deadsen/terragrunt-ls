@@ -98,6 +98,8 @@ inputs = {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			withDeclaration := references.GetReferences(l, st, tt.position, tgPath, true)
 			require.Len(t, withDeclaration, 2)
 			withoutDeclaration := references.GetReferences(l, st, tt.position, tgPath, false)

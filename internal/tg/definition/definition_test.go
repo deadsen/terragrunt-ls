@@ -115,20 +115,22 @@ inputs = {
 
 	tests := []struct {
 		name     string
-		position protocol.Position
 		file     string
+		position protocol.Position
 		line     uint32
 	}{
-		{"local reference", protocol.Position{Line: 11, Character: 24}, unitFile, 1},
-		{"dependency config path", protocol.Position{Line: 11, Character: 4}, appConfig, 0},
-		{"dependency reference", protocol.Position{Line: 15, Character: 23}, appConfig, 0},
-		{"include path", protocol.Position{Line: 6, Character: 10}, rootConfig, 0},
-		{"include reference", protocol.Position{Line: 16, Character: 20}, rootConfig, 0},
-		{"file call", protocol.Position{Line: 2, Character: 20}, dataFile, 0},
+		{name: "local reference", file: unitFile, position: protocol.Position{Line: 11, Character: 24}, line: 1},
+		{name: "dependency config path", file: appConfig, position: protocol.Position{Line: 11, Character: 4}},
+		{name: "dependency reference", file: appConfig, position: protocol.Position{Line: 15, Character: 23}},
+		{name: "include path", file: rootConfig, position: protocol.Position{Line: 6, Character: 10}},
+		{name: "include reference", file: rootConfig, position: protocol.Position{Line: 16, Character: 20}},
+		{name: "file call", file: dataFile, position: protocol.Position{Line: 2, Character: 20}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			locations := definition.Resolve(st, docURI, tt.position)
 			require.Len(t, locations, 1)
 			assert.Equal(t, uri.File(tt.file), locations[0].URI)
@@ -159,12 +161,10 @@ func TestResolveFileThroughFindInParentFolders(t *testing.T) {
 	st := state.Configs[sourceFile]
 
 	for _, target := range []string{"find_in_parent_folders", "environment.yaml"} {
-		t.Run(target, func(t *testing.T) {
-			locations := definition.Resolve(st, docURI, positionWithin(source, target))
+		locations := definition.Resolve(st, docURI, positionWithin(source, target))
 
-			require.Len(t, locations, 1)
-			assert.Equal(t, uri.File(environmentFile), locations[0].URI)
-		})
+		require.Len(t, locations, 1)
+		assert.Equal(t, uri.File(environmentFile), locations[0].URI)
 	}
 
 	require.NoError(t, os.Remove(environmentFile))

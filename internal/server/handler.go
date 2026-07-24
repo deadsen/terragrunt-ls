@@ -25,6 +25,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			return respond(s.initialize(), nil)
 
 		case protocol.MethodInitialized:
@@ -32,6 +33,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			return respond(nil, nil)
 
 		case protocol.MethodTextDocumentDidOpen:
@@ -39,10 +41,12 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			diagnostics, applied := s.state.OpenDocumentWithStatus(ctx, s.log, params.TextDocument.URI, params.TextDocument.Text, params.TextDocument.Version)
 			if !applied {
 				return respond(nil, nil)
 			}
+
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -53,14 +57,18 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			if len(params.ContentChanges) == 0 {
 				return respond(nil, nil)
 			}
+
 			change := params.ContentChanges[len(params.ContentChanges)-1]
+
 			diagnostics, applied := s.state.UpdateDocumentWithStatus(ctx, s.log, params.TextDocument.URI, change.Text, params.TextDocument.Version)
 			if !applied {
 				return respond(nil, nil)
 			}
+
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -71,10 +79,12 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			diagnostics, applied := s.state.SaveDocumentWithStatus(ctx, s.log, params.TextDocument.URI)
 			if !applied {
 				return respond(nil, nil)
 			}
+
 			return respond(nil, s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: diagnostics,
@@ -85,11 +95,13 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			s.state.CloseDocument(params.TextDocument.URI)
 			err := s.client.PublishDiagnostics(ctx, protocol.PublishDiagnosticsParams{
 				URI:         params.TextDocument.URI,
 				Diagnostics: []protocol.Diagnostic{},
 			})
+
 			return respond(nil, err)
 
 		case protocol.MethodTextDocumentHover:
@@ -97,11 +109,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.Hover(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond((*protocol.Hover)(nil), nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentDefinition:
@@ -109,11 +124,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.Definition(params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond([]protocol.Location{}, nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentCompletion:
@@ -121,11 +139,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.TextDocumentCompletion(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond([]protocol.CompletionItem{}, nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentFormatting:
@@ -133,11 +154,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.TextDocumentFormatting(s.log, params.TextDocument.URI)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond([]protocol.TextEdit{}, nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentReferences:
@@ -145,11 +169,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.TextDocumentReferences(s.log, params.TextDocument.URI, params.Position, params.Context.IncludeDeclaration)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentPrepareRename:
@@ -157,14 +184,18 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			renameRange, placeholder, found := s.state.PrepareRename(s.log, params.TextDocument.URI, params.Position)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
+
 			if !found {
 				return respond(nil, nil)
 			}
+
 			return respond(&prepareRenameResult{Range: renameRange, Placeholder: placeholder}, nil)
 
 		case protocol.MethodTextDocumentRename:
@@ -172,11 +203,14 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			st, ok := s.state.Document(params.TextDocument.URI)
+
 			result := s.state.TextDocumentRename(s.log, params.TextDocument.URI, params.Position, params.NewName)
 			if !ok || !s.state.IsCurrent(params.TextDocument.URI, st.Version) {
 				return respond(nil, nil)
 			}
+
 			return respond(result, nil)
 
 		case protocol.MethodTextDocumentCodeAction:
@@ -184,6 +218,7 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			return respond(s.dependencyOutputCodeActions(params), nil)
 
 		case protocol.MethodWorkspaceExecuteCommand:
@@ -191,14 +226,18 @@ func (s *Server) Handler() jsonrpc2.Handler {
 			if err := decodeParams(req, &params); err != nil {
 				return respond(nil, err)
 			}
+
 			if params.Command != ResolveDependencyOutputsCommand {
 				return respond(nil, fmt.Errorf("unsupported command %q: %w", params.Command, jsonrpc2.ErrMethodNotFound))
 			}
+
 			args, err := decodeDependencyOutputArgs(params.Arguments)
 			if err != nil {
 				return respond(nil, fmt.Errorf("invalid command arguments: %w: %w", err, jsonrpc2.ErrInvalidParams))
 			}
+
 			result, err := s.executeDependencyOutputs(ctx, args)
+
 			return respond(result, err)
 
 		case protocol.MethodShutdown:
@@ -207,11 +246,13 @@ func (s *Server) Handler() jsonrpc2.Handler {
 
 		case protocol.MethodExit:
 			s.cleanupTempFiles()
+
 			select {
 			case <-s.exited:
 			default:
 				close(s.exited)
 			}
+
 			return respond(nil, nil)
 
 		default:
@@ -221,8 +262,8 @@ func (s *Server) Handler() jsonrpc2.Handler {
 }
 
 type prepareRenameResult struct {
-	Range       protocol.Range `json:"range"`
 	Placeholder string         `json:"placeholder"`
+	Range       protocol.Range `json:"range"`
 }
 
 func decodeParams(req jsonrpc2.Request, params any) error {

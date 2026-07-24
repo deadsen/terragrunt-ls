@@ -36,13 +36,17 @@ func Validate(filename, source string, st store.Store) []protocol.Diagnostic {
 		}
 
 		root, rootOK := expression.Traversal[0].(hcl.TraverseRoot)
+
 		attribute, attributeOK := expression.Traversal[1].(hcl.TraverseAttr)
 		if !rootOK || !attributeOK {
 			return nil
 		}
 
-		var scope ast.Scope
-		var message string
+		var (
+			scope   ast.Scope
+			message string
+		)
+
 		switch root.Name {
 		case "local":
 			scope = st.AST.Locals
@@ -84,6 +88,7 @@ func FilterParser(st store.Store, input []protocol.Diagnostic) []protocol.Diagno
 			isDependencyTraversal(st, diagnostic.Range.Start) {
 			continue
 		}
+
 		filtered = append(filtered, diagnostic)
 	}
 
@@ -100,21 +105,26 @@ func validateDependencies(filename, source string, st store.Store) []protocol.Di
 	for _, node := range st.AST.Dependencies {
 		nodes = append(nodes, node)
 	}
+
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodes[i].Range().Start.Byte < nodes[j].Range().Start.Byte
 	})
 
 	result := make([]protocol.Diagnostic, 0)
+
 	for _, node := range nodes {
 		block, ok := node.Node.(*hclsyntax.Block)
 		if !ok || len(block.Labels) == 0 {
 			continue
 		}
+
 		name := block.Labels[0]
+
 		attribute, exists := block.Body.Attributes["config_path"]
 		if !exists {
 			result = append(result, semanticDiagnostic(source, block.TypeRange,
 				fmt.Sprintf(`Dependency %q is missing a config_path attribute.`, name)))
+
 			continue
 		}
 
@@ -122,6 +132,7 @@ func validateDependencies(filename, source string, st store.Store) []protocol.Di
 		if err != nil {
 			result = append(result, semanticDiagnostic(source, attribute.Expr.Range(),
 				fmt.Sprintf(`Could not evaluate dependency %q config_path to a concrete string path.`, name)))
+
 			continue
 		}
 
@@ -137,10 +148,12 @@ func validateDependencies(filename, source string, st store.Store) []protocol.Di
 func validateDuplicateLocals(source string, body *hclsyntax.Body) []protocol.Diagnostic {
 	seen := false
 	result := make([]protocol.Diagnostic, 0)
+
 	for _, block := range body.Blocks {
 		if block.Type != "locals" {
 			continue
 		}
+
 		if !seen {
 			seen = true
 			continue
@@ -168,7 +181,9 @@ func isDependencyTraversal(st store.Store, position protocol.Position) bool {
 		if !ok || len(expression.Traversal) == 0 {
 			continue
 		}
+
 		root, ok := expression.Traversal[0].(hcl.TraverseRoot)
+
 		return ok && root.Name == "dependency"
 	}
 
@@ -180,9 +195,11 @@ func sortDiagnostics(input []protocol.Diagnostic) {
 		if input[i].Range.Start.Line != input[j].Range.Start.Line {
 			return input[i].Range.Start.Line < input[j].Range.Start.Line
 		}
+
 		if input[i].Range.Start.Character != input[j].Range.Start.Character {
 			return input[i].Range.Start.Character < input[j].Range.Start.Character
 		}
+
 		return input[i].Message < input[j].Message
 	})
 }
