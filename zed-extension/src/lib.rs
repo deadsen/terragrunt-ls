@@ -316,6 +316,7 @@ mod tests {
 
     const HIGHLIGHTS_QUERY: &str = include_str!("../languages/terragrunt/highlights.scm");
     const LANGUAGE_CONFIG: &str = include_str!("../languages/terragrunt/config.toml");
+    const MANAGED_BINARY_PATH: &str = "managed/terragrunt-ls";
 
     #[test]
     fn configured_binary_wins() {
@@ -328,7 +329,7 @@ mod tests {
         let command = resolve_command(
             Some(configured),
             Some("/usr/bin/terragrunt-ls".into()),
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some(MANAGED_BINARY_PATH.into()),
         )
         .unwrap();
 
@@ -342,7 +343,7 @@ mod tests {
         let command = resolve_command(
             None,
             Some("/usr/bin/terragrunt-ls".into()),
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some(MANAGED_BINARY_PATH.into()),
         )
         .unwrap();
 
@@ -353,14 +354,9 @@ mod tests {
 
     #[test]
     fn managed_binary_is_used_as_the_last_fallback() {
-        let command = resolve_command(
-            None,
-            None,
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
-        )
-        .unwrap();
+        let command = resolve_command(None, None, Some(MANAGED_BINARY_PATH.into())).unwrap();
 
-        assert_eq!(command.command, "terragrunt-ls-v0.2.0/terragrunt-ls");
+        assert_eq!(command.command, MANAGED_BINARY_PATH);
     }
 
     #[test]
@@ -371,12 +367,8 @@ mod tests {
             env: Some(HashMap::from([("TG_LOG".into(), "debug".into())])),
         };
 
-        let command = resolve_command(
-            Some(configured),
-            None,
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
-        )
-        .unwrap();
+        let command =
+            resolve_command(Some(configured), None, Some(MANAGED_BINARY_PATH.into())).unwrap();
 
         assert_eq!(command.args, vec!["--trace"]);
         assert!(command.env.contains(&("TG_LOG".into(), "debug".into())));

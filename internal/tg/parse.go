@@ -117,16 +117,6 @@ func filterHCLDiags(l logger.Logger, diags hcl.Diagnostics, filename, text strin
 			continue
 		}
 
-		if isParentFileNotFoundDiag(diag) {
-			l.Debug(
-				"Filtering parent file not found diag",
-				"diag", diag,
-				"filename", filename,
-			)
-
-			continue
-		}
-
 		if isUnresolvableAttributeDiag(diag, text) {
 			l.Debug(
 				"Filtering unresolvable attribute diag",
@@ -163,22 +153,6 @@ func isMissingOutputDiag(diag *hcl.Diagnostic) bool {
 	}
 
 	return diag.Detail == OutputsMissingDetail
-}
-
-const (
-	// ErrorInFunctionCallSummary is the summary for an error in a function call diagnostic.
-	ErrorInFunctionCallSummary = "Error in function call"
-
-	// ParentFileNotFoundErrorDetailPartial is the partial detail for a parent file not found diagnostic.
-	ParentFileNotFoundErrorDetailPartial = `Call to function "find_in_parent_folders" failed: ParentFileNotFoundError`
-)
-
-func isParentFileNotFoundDiag(diag *hcl.Diagnostic) bool {
-	if diag.Summary != ErrorInFunctionCallSummary {
-		return false
-	}
-
-	return strings.HasPrefix(diag.Detail, ParentFileNotFoundErrorDetailPartial)
 }
 
 const (

@@ -1,6 +1,6 @@
 id = "terragrunt-ls-deadsen"
 name = "deadsen Terragrunt"
-version = "0.2.0"
+version = "0.2.1"
 schema_version = 1
 authors = [
 	"Arsen Yushchenko <goclever899@gmail.com>",

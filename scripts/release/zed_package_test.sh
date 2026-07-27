@@ -2,12 +2,17 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=scripts/release/common.sh
+source "$SCRIPT_DIR/common.sh"
+
+version="$(release_toml_version "$REPO_ROOT/zed-extension/extension.toml")"
 dist="$(mktemp -d)"
 trap 'rm -rf "$dist"' EXIT
 
-DIST_DIR="$dist" "$SCRIPT_DIR/package-zed.sh" v0.2.0
+DIST_DIR="$dist" "$SCRIPT_DIR/package-zed.sh" "v$version"
 
-archive="$dist/terragrunt-ls-zed-0.2.0.zip"
+archive="$dist/terragrunt-ls-zed-$version.zip"
 [[ -f "$archive" ]]
 
 for required in \

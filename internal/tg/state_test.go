@@ -55,6 +55,33 @@ func TestStateVersionedLifecycle(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestStateReportsMissingParentFileBeforeDependencyPath(t *testing.T) {
+
+	t.Parallel()
+
+	filename := filepath.Join(t.TempDir(), "environment", "terragrunt.hcl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(filename), 0o755))
+
+	diagnostics := tg.NewState().OpenDocument(t.Context(), testutils.NewTestLogger(t), uri.File(filename), `
+locals {
+  account = yamldecode(file("${find_in_parent_folders("accounts.yaml")}"))
+}
+
+dependency "enhanced-monitoring-role" {
+  config_path = "../${local.account.name}"
+}
+`, 1)
+
+	messages := make([]string, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		messages = append(messages, diagnostic.Message)
+	}
+
+	joinedMessages := strings.Join(messages, "\n")
+	assert.Contains(t, joinedMessages, "accounts.yaml")
+	assert.NotContains(t, joinedMessages, `Could not evaluate dependency "enhanced-monitoring-role" config_path to a concrete string path.`)
+}
+
 func TestStateSaveDoesNotRestoreClosedDocument(t *testing.T) {
 	t.Parallel()
 
