@@ -328,7 +328,7 @@ mod tests {
         let command = resolve_command(
             Some(configured),
             Some("/usr/bin/terragrunt-ls".into()),
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some("terragrunt-ls-v0.2.1/terragrunt-ls".into()),
         )
         .unwrap();
 
@@ -342,7 +342,7 @@ mod tests {
         let command = resolve_command(
             None,
             Some("/usr/bin/terragrunt-ls".into()),
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some("terragrunt-ls-v0.2.1/terragrunt-ls".into()),
         )
         .unwrap();
 
@@ -356,11 +356,11 @@ mod tests {
         let command = resolve_command(
             None,
             None,
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some("terragrunt-ls-v0.2.1/terragrunt-ls".into()),
         )
         .unwrap();
 
-        assert_eq!(command.command, "terragrunt-ls-v0.2.0/terragrunt-ls");
+        assert_eq!(command.command, "terragrunt-ls-v0.2.1/terragrunt-ls");
     }
 
     #[test]
@@ -374,7 +374,7 @@ mod tests {
         let command = resolve_command(
             Some(configured),
             None,
-            Some("terragrunt-ls-v0.2.0/terragrunt-ls".into()),
+            Some("terragrunt-ls-v0.2.1/terragrunt-ls".into()),
         )
         .unwrap();
 

@@ -19,6 +19,8 @@ const sourceName = "Terragrunt"
 
 const unknownValueDiagnostic = `Unsuitable value type: Unsuitable value: value must be known`
 
+const parentFileNotFoundDiagnostic = "ParentFileNotFoundError"
+
 // Validate returns semantic diagnostics for declarations and traversals.
 func Validate(filename, source string, st store.Store) []protocol.Diagnostic {
 	if st.AST == nil || st.AST.HCLFile == nil {
@@ -137,6 +139,10 @@ func validateDependencies(filename, source string, st store.Store) []protocol.Di
 
 		configPath, err := terragruntpath.DependencyConfig(st, name)
 		if err != nil {
+			if hasParentFileNotFoundDiagnostic(st.Diagnostics) {
+				continue
+			}
+
 			result = append(result, semanticDiagnostic(source, attribute.Expr.Range(),
 				fmt.Sprintf(`Could not evaluate dependency %q config_path to a concrete string path.`, name)))
 
@@ -150,6 +156,16 @@ func validateDependencies(filename, source string, st store.Store) []protocol.Di
 	}
 
 	return result
+}
+
+func hasParentFileNotFoundDiagnostic(diagnostics []protocol.Diagnostic) bool {
+	for _, diagnostic := range diagnostics {
+		if strings.Contains(diagnostic.Message, parentFileNotFoundDiagnostic) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateDuplicateLocals(source string, body *hclsyntax.Body) []protocol.Diagnostic {

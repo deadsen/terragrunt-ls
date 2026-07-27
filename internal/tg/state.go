@@ -197,6 +197,9 @@ func (s *State) updateStateAtGeneration(ctx context.Context, l logger.Logger, do
 	}
 
 	if fileType == store.FileTypeUnit {
+		// Semantic validation must not add derived errors when parsing already
+		// reported the source failure that made an expression unevaluable.
+		st.Diagnostics = append([]protocol.Diagnostic(nil), diags...)
 		diags = append(diags, diagnostics.Validate(filename, text, st)...)
 		diagnostics.Sort(diags)
 	}
