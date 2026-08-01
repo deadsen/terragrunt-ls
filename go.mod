@@ -8,7 +8,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/zclconf/go-cty v1.19.0
-	go.lsp.dev/jsonrpc2 v0.10.0
+	go.lsp.dev/jsonrpc2 v1.0.1
 	go.lsp.dev/protocol v0.12.0
 	go.lsp.dev/uri v0.3.0
 )
@@ -93,6 +93,7 @@ require (
 	github.com/go-git/go-billy/v6 v6.0.0-alpha.1 // indirect
 	github.com/go-git/go-git/v6 v6.0.0-alpha.1 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
